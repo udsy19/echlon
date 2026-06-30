@@ -20,16 +20,42 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from .config import load_config
+from .logsetup import get_logger, setup_logging
 from .models import ensure_ready
 from .session import Session
+
+log = get_logger(__name__)
 
 _sessions: dict[str, Session] = {}
 _MAX_BODY = 1 << 20  # 1 MiB request cap
 _MAX_STEPS_LIMIT = 200
+_MAX_SESSIONS = 64  # retain at most this many; oldest *finished* ones are evicted
+_TERMINAL = ("done", "error", "cancelled")
 
 
 def _active_session() -> Session | None:
     return next((s for s in _sessions.values() if s.status == "running"), None)
+
+
+def _gc_sessions() -> int:
+    """Evict the oldest finished sessions once the registry exceeds the cap.
+
+    Running/pending sessions are never evicted (their event streams may still be
+    consumed); only terminal ones are reclaimed, oldest first. Returns the count
+    evicted. Without this the registry grows unbounded for the daemon's lifetime.
+    """
+    excess = len(_sessions) - _MAX_SESSIONS
+    if excess <= 0:
+        return 0
+    evicted = 0
+    for sid in [s for s, sess in _sessions.items() if sess.status in _TERMINAL]:
+        if evicted >= excess:
+            break
+        del _sessions[sid]
+        evicted += 1
+    if evicted:
+        log.debug("session gc", extra={"evicted": evicted, "remaining": len(_sessions)})
+    return evicted
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -109,15 +135,20 @@ class _Handler(BaseHTTPRequestHandler):
             ensure_ready(cfg)
         except RuntimeError as exc:
             return self._json(400, {"error": str(exc)})
+        _gc_sessions()
         session = Session(cfg, task).start()
         _sessions[session.id] = session
+        log.info("run started", extra={"session": session.id, "model": cfg.model_id,
+                                       "policy": cfg.policy_mode, "max_steps": cfg.max_steps})
         self._json(200, {"session_id": session.id})
 
     def _cancel(self, body: dict) -> None:
         session = _sessions.get(body.get("session", ""))
         if session is None:
             return self._json(404, {"error": "unknown session"})
-        self._json(200, {"ok": session.cancel(), "status": session.status})
+        ok = session.cancel()
+        log.info("run cancel requested", extra={"session": session.id, "ok": ok})
+        self._json(200, {"ok": ok, "status": session.status})
 
     def _status(self, session_id: str) -> None:
         session = _sessions.get(session_id)
@@ -150,11 +181,13 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 def run_server(host: str = "127.0.0.1", port: int = 8765) -> None:
+    setup_logging()
     httpd = ThreadingHTTPServer((host, port), _Handler)
-    print(f"[echlon] daemon listening on http://{host}:{port}")
+    log.info("daemon listening", extra={"host": host, "port": port})
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
         httpd.server_close()
+        log.info("daemon stopped")

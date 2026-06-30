@@ -23,7 +23,10 @@ from dataclasses import asdict, dataclass, field
 
 from .agent import build_agent
 from .config import EchlonConfig
+from .logsetup import get_logger
 from .policy import set_policy
+
+log = get_logger(__name__)
 
 _DECISIONS = {"once", "always", "deny"}
 
@@ -119,21 +122,26 @@ class Session:
             # Override the policy prompter so confirmations route to this session.
             set_policy(self.cfg.policy_mode, self.cfg.workspace, prompter=self._prompter)  # type: ignore[arg-type]
             self._emit("started", {"task": self.task, "model": self.cfg.model_id})
+            log.info("session running", extra={"session": self.id, "model": self.cfg.model_id})
             for ev in self._agent.run(self.task, stream=True):
                 self._translate(ev)
             self.status = "cancelled" if self._cancelled else "done"
         except AgentMaxStepsError as exc:
             self.status = "error"
             self._emit("error", {"message": f"max steps reached: {exc}", "kind": "max_steps"})
+            log.warning("session max steps", extra={"session": self.id})
         except Exception as exc:  # noqa: BLE001 — surface to the consumer
             self.status = "cancelled" if self._cancelled else "error"
             self._emit("error", {"message": str(exc)})
+            log.error("session failed", extra={"session": self.id, "error": str(exc)})
         finally:
             try:
                 browser.reset()  # don't leak browser state into the next session
             except Exception:
                 pass
             self._emit("done", {"status": self.status})
+            log.info("session done", extra={"session": self.id, "status": self.status,
+                                            "events": len(self._log)})
             with self._cv:
                 self._finished = True
                 self._cv.notify_all()
