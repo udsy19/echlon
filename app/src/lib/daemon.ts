@@ -31,6 +31,29 @@ export async function startTask(base: string, payload: RunConfig): Promise<strin
   return invoke<string>("start_task", { base, payload });
 }
 
+/** `POST /message` — send a message to an open session. The daemon decides
+ *  whether it starts a new turn or steers the running one; returns {ok, mode}. */
+export async function sendMessage(
+  base: string,
+  session: string,
+  text: string,
+): Promise<{ ok: boolean; mode?: string; reason?: string }> {
+  if (!isTauri()) throw new Error(NOT_TAURI);
+  return invoke("send_message", { base, session, text });
+}
+
+/** `POST /cancel` — cancel the in-progress turn (session stays open). */
+export async function cancelTurn(base: string, session: string): Promise<boolean> {
+  if (!isTauri()) throw new Error(NOT_TAURI);
+  return invoke<boolean>("cancel_turn", { base, session });
+}
+
+/** `POST /close` — end the conversation/session. */
+export async function closeSession(base: string, session: string): Promise<boolean> {
+  if (!isTauri()) throw new Error(NOT_TAURI);
+  return invoke<boolean>("close_session", { base, session });
+}
+
 /** `POST /approve` — answer a pending approval. */
 export async function approve(
   base: string,

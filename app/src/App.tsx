@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { Header } from "./components/Header";
-import { TaskComposer } from "./components/TaskComposer";
-import { EventStream } from "./components/EventStream";
+import { Conversation } from "./components/Conversation";
+import { MessageBar } from "./components/MessageBar";
 import { ConnectionNotice } from "./components/ConnectionNotice";
 import { BackgroundBlobs } from "./components/ui/BackgroundBlobs";
 import { useAgentSession } from "./hooks/useAgentSession";
@@ -12,6 +12,7 @@ import { DEFAULT_CONFIG, toRunConfig, type ConsoleConfig } from "./lib/config";
 export default function App() {
   const { theme, toggle } = useTheme();
   const [config, setConfig] = useState<ConsoleConfig>(DEFAULT_CONFIG);
+  const [draft, setDraft] = useState("");
   const { state: health, refresh: refreshHealth } = useDaemonHealth(config.base);
   const session = useAgentSession(config.base);
 
@@ -19,12 +20,12 @@ export default function App() {
     setConfig((c) => ({ ...c, ...patch }));
   }, []);
 
-  const onRun = useCallback(
-    (task: string) => {
-      void session.run(toRunConfig(config, task));
-    },
-    [config, session],
-  );
+  const onSend = useCallback(() => {
+    const text = draft.trim();
+    if (!text) return;
+    void session.send(text, toRunConfig(config, text));
+    setDraft("");
+  }, [draft, config, session]);
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
@@ -33,29 +34,30 @@ export default function App() {
 
       {health === "offline" && <ConnectionNotice base={config.base} onRetry={refreshHealth} />}
 
-      <main className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        {/* Composer / settings pane */}
-        <div className="shrink-0 overflow-y-auto scroll-thin border-b border-border/40 px-6 py-6 lg:w-[440px] lg:border-b-0 lg:border-r lg:py-8">
-          <TaskComposer
-            config={config}
-            onConfigChange={patchConfig}
-            onRun={onRun}
-            onReset={session.reset}
-            status={session.status}
-            isBusy={session.isBusy}
-            health={health}
-          />
-        </div>
-
-        {/* Live event stream */}
+      <main className="flex min-h-0 flex-1 flex-col">
         <div className="min-h-0 flex-1">
-          <EventStream
+          <Conversation
             events={session.events}
             status={session.status}
             pending={session.pending}
             onDecide={session.decide}
+            onExample={setDraft}
           />
         </div>
+
+        <MessageBar
+          value={draft}
+          onChange={setDraft}
+          onSend={onSend}
+          onStop={session.cancel}
+          onNew={session.newConversation}
+          running={session.isBusy}
+          hasConversation={session.hasConversation}
+          offline={health === "offline"}
+          config={config}
+          onConfigChange={patchConfig}
+          configLocked={session.hasConversation}
+        />
       </main>
     </div>
   );

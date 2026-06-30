@@ -1,5 +1,12 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import { approve as approveCall, startTask, streamEvents } from "../lib/daemon";
+import {
+  approve as approveCall,
+  cancelTurn,
+  closeSession,
+  sendMessage,
+  startTask,
+  streamEvents,
+} from "../lib/daemon";
 import type {
   ApprovalDecision,
   DaemonEvent,
@@ -14,7 +21,6 @@ interface SessionState {
   sessionId: string | null;
   events: TimelineEvent[];
   pending: PendingApproval[];
-  finalAnswer: string | null;
   error: string | null;
 }
 
@@ -23,36 +29,32 @@ const INITIAL: SessionState = {
   sessionId: null,
   events: [],
   pending: [],
-  finalAnswer: null,
   error: null,
 };
 
-/** Owns one agent run: starts the task, consumes the event stream, tracks
- *  pending approvals, and derives a single status the UI renders from. */
+/** Owns one ongoing conversation with the agent: opens the session on the first
+ *  message, keeps the (single, long-lived) event stream, sends follow-up messages
+ *  that either start a new turn or steer the running one, and tracks approvals. */
 export function useAgentSession(base: string) {
   const [state, setState] = useState<SessionState>(INITIAL);
   const seq = useRef(0);
-  // Guards against late events from a previous run landing in a new one.
-  const runToken = useRef(0);
+  const token = useRef(0); // guards stale events from a closed conversation
+  const sessionRef = useRef<string | null>(null);
 
-  const ingest = useCallback((token: number, event: DaemonEvent) => {
-    if (token !== runToken.current) return;
+  const ingest = useCallback((tk: number, event: DaemonEvent) => {
+    if (tk !== token.current) return;
 
     if (event.type === "__closed") {
-      setState((s) =>
-        // Only settle to "done" if the run hadn't already errored or finished.
-        s.status === "error" || s.status === "done"
-          ? s
-          : { ...s, status: s.pending.length ? s.status : "done" },
-      );
+      setState((s) => (s.status === "error" ? s : { ...s, status: "closed" }));
       return;
     }
 
     setState((s) => {
-      const timelineEvent: TimelineEvent = { ...event, _id: seq.current++, _at: Date.now() };
-      const events = [...s.events, timelineEvent];
-
+      const te: TimelineEvent = { ...event, _id: seq.current++, _at: Date.now() };
+      const events = [...s.events, te];
       switch (event.type) {
+        case "turn_started":
+          return { ...s, events, status: "running" };
         case "approval_request":
           return {
             ...s,
@@ -61,47 +63,53 @@ export function useAgentSession(base: string) {
             status: "awaiting_approval",
           };
         case "approval_timeout": {
-          // The daemon timed the request out (treated as deny); drop the prompt
-          // so the UI doesn't stay stuck waiting on an answer it can't give.
           const pending = s.pending.filter((p) => p.id !== event.data.id);
           return { ...s, events, pending, status: pending.length ? "awaiting_approval" : "running" };
         }
-        case "final_answer":
-          return { ...s, events, finalAnswer: event.data.output };
-        case "error":
-          return { ...s, events, error: event.data.message, status: "error" };
-        case "done":
-          return { ...s, events, status: s.pending.length ? s.status : "done" };
+        case "turn_done":
+          return { ...s, events, status: s.pending.length ? s.status : "idle" };
+        case "closed":
+          return { ...s, events, status: "closed" };
         default:
-          // Any forward progress clears the "awaiting" state if nothing is pending.
-          return {
-            ...s,
-            events,
-            status: s.pending.length ? s.status : "running",
-          };
+          // plan / tool_call / step / final_answer / error / user_message / started
+          return { ...s, events };
       }
     });
   }, []);
 
-  const run = useCallback(
-    async (config: RunConfig) => {
-      const token = ++runToken.current;
+  /** Send a message. First message opens the session (using runConfig); later
+   *  messages go to the open session, where the daemon starts a new turn (idle)
+   *  or steers the running one. */
+  const send = useCallback(
+    async (text: string, runConfig: RunConfig) => {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+
+      if (sessionRef.current) {
+        const sid = sessionRef.current;
+        setState((s) => (s.status === "idle" ? { ...s, status: "running" } : s));
+        try {
+          await sendMessage(base, sid, trimmed);
+        } catch (err) {
+          setState((s) => ({ ...s, error: errorMessage(err) }));
+        }
+        return;
+      }
+
+      const tk = ++token.current;
       seq.current = 0;
       setState({ ...INITIAL, status: "starting" });
       try {
-        const sessionId = await startTask(base, config);
-        if (token !== runToken.current) return;
-        setState((s) => ({ ...s, sessionId, status: "running" }));
-        streamEvents(base, sessionId, (event) => ingest(token, event)).catch((err) => {
-          if (token !== runToken.current) return;
-          setState((s) =>
-            s.status === "done" || s.status === "error"
-              ? s
-              : { ...s, status: "error", error: String(err) },
-          );
+        const sid = await startTask(base, { ...runConfig, task: trimmed });
+        if (tk !== token.current) return;
+        sessionRef.current = sid;
+        setState((s) => ({ ...s, sessionId: sid, status: "running" }));
+        streamEvents(base, sid, (e) => ingest(tk, e)).catch((err) => {
+          if (tk !== token.current) return;
+          setState((s) => (s.status === "closed" ? s : { ...s, status: "error", error: String(err) }));
         });
       } catch (err) {
-        if (token !== runToken.current) return;
+        if (tk !== token.current) return;
         setState((s) => ({ ...s, status: "error", error: errorMessage(err) }));
       }
     },
@@ -110,9 +118,8 @@ export function useAgentSession(base: string) {
 
   const decide = useCallback(
     async (id: string, decision: ApprovalDecision) => {
-      const sessionId = state.sessionId;
-      if (!sessionId) return;
-      // Optimistically remove the prompt; restore it if the call fails.
+      const sid = sessionRef.current;
+      if (!sid) return;
       const removed = state.pending.find((p) => p.id === id);
       setState((s) => ({
         ...s,
@@ -120,7 +127,7 @@ export function useAgentSession(base: string) {
         status: s.pending.length > 1 ? "awaiting_approval" : "running",
       }));
       try {
-        await approveCall(base, sessionId, id, decision);
+        await approveCall(base, sid, id, decision);
       } catch (err) {
         if (removed) {
           setState((s) => ({
@@ -132,23 +139,43 @@ export function useAgentSession(base: string) {
         }
       }
     },
-    [base, state.sessionId, state.pending],
+    [base, state.pending],
   );
 
-  /** Abandon the current run locally (the daemon keeps going; this just detaches
-   *  the UI so a fresh task can be composed). */
-  const reset = useCallback(() => {
-    runToken.current++;
+  /** Stop the in-progress turn (the conversation stays open). */
+  const cancel = useCallback(async () => {
+    const sid = sessionRef.current;
+    if (!sid) return;
+    try {
+      await cancelTurn(base, sid);
+    } catch {
+      /* best-effort */
+    }
+  }, [base]);
+
+  /** End this conversation and clear the UI for a fresh one. */
+  const newConversation = useCallback(async () => {
+    const sid = sessionRef.current;
+    token.current++;
     seq.current = 0;
+    sessionRef.current = null;
     setState(INITIAL);
-  }, []);
+    if (sid) {
+      try {
+        await closeSession(base, sid);
+      } catch {
+        /* best-effort */
+      }
+    }
+  }, [base]);
 
   const isBusy = useMemo(
     () => state.status === "starting" || state.status === "running" || state.status === "awaiting_approval",
     [state.status],
   );
+  const hasConversation = state.events.length > 0 || state.sessionId !== null;
 
-  return { ...state, isBusy, run, decide, reset };
+  return { ...state, isBusy, hasConversation, send, decide, cancel, newConversation };
 }
 
 function errorMessage(err: unknown): string {

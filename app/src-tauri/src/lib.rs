@@ -76,6 +76,57 @@ async fn start_task(base: String, payload: Value) -> Result<String, String> {
         .ok_or_else(|| "daemon did not return a session_id".to_string())
 }
 
+/// `POST /message` — send a message to an open session (new turn, or steers a
+/// running turn). Returns the daemon's `{ok, mode}` body.
+#[tauri::command]
+async fn send_message(base: String, session: String, text: String) -> Result<Value, String> {
+    let client = http_client(Duration::from_secs(15))?;
+    let url = format!("{}/message", normalize_base(&base));
+    let resp = client
+        .post(&url)
+        .json(&serde_json::json!({ "session": session, "text": text }))
+        .send()
+        .await
+        .map_err(|e| format!("could not reach the daemon: {e}"))?;
+    let status = resp.status();
+    let body: Value = resp.json().await.map_err(|e| format!("{e}"))?;
+    if !status.is_success() {
+        let msg = body.get("error").and_then(Value::as_str).unwrap_or("unknown error");
+        return Err(format!("daemon rejected the message ({status}): {msg}"));
+    }
+    Ok(body)
+}
+
+/// `POST /cancel` — cancel the in-progress turn (the session stays open).
+#[tauri::command]
+async fn cancel_turn(base: String, session: String) -> Result<bool, String> {
+    let client = http_client(Duration::from_secs(10))?;
+    let url = format!("{}/cancel", normalize_base(&base));
+    let resp = client
+        .post(&url)
+        .json(&serde_json::json!({ "session": session }))
+        .send()
+        .await
+        .map_err(|e| format!("could not reach the daemon: {e}"))?;
+    let body: Value = resp.json().await.map_err(|e| format!("{e}"))?;
+    Ok(body.get("ok").and_then(Value::as_bool).unwrap_or(false))
+}
+
+/// `POST /close` — end the conversation/session.
+#[tauri::command]
+async fn close_session(base: String, session: String) -> Result<bool, String> {
+    let client = http_client(Duration::from_secs(10))?;
+    let url = format!("{}/close", normalize_base(&base));
+    let resp = client
+        .post(&url)
+        .json(&serde_json::json!({ "session": session }))
+        .send()
+        .await
+        .map_err(|e| format!("could not reach the daemon: {e}"))?;
+    let body: Value = resp.json().await.map_err(|e| format!("{e}"))?;
+    Ok(body.get("ok").and_then(Value::as_bool).unwrap_or(false))
+}
+
 /// `POST /approve` — answer a pending approval (`once` | `always` | `deny`).
 #[tauri::command]
 async fn approve(
@@ -183,6 +234,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             daemon_health,
             start_task,
+            send_message,
+            cancel_turn,
+            close_session,
             approve,
             stream_events
         ])

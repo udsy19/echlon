@@ -4,14 +4,17 @@
 
 export type DaemonEvent =
   | { type: "started"; data: { task: string; model: string } }
+  | { type: "user_message"; data: { text: string } }
+  | { type: "turn_started"; data: { turn: number; text: string } }
   | { type: "plan"; data: { plan: string } }
   | { type: "tool_call"; data: { name: string; arguments: string } }
   | { type: "step"; data: { step: number; observations: string; error: string | null } }
   | { type: "approval_request"; data: { id: string; summary: string } }
   | { type: "approval_timeout"; data: { id: string; summary: string } }
   | { type: "final_answer"; data: { output: string } }
+  | { type: "turn_done"; data: { turn: number; status: string } }
   | { type: "error"; data: { message: string; kind?: string } }
-  | { type: "done"; data: { status?: string } }
+  | { type: "closed"; data: { turns: number } }
   | { type: "__closed"; data?: Record<string, never> };
 
 export type DaemonEventType = DaemonEvent["type"];
@@ -20,11 +23,11 @@ export type DaemonEventType = DaemonEvent["type"];
 export type TimelineEvent = DaemonEvent & { _id: number; _at: number };
 
 export type SessionStatus =
-  | "idle"
-  | "starting"
-  | "running"
+  | "idle"        // no conversation yet, or between turns waiting for input
+  | "starting"    // opening the session / first turn
+  | "running"     // a turn is in progress
   | "awaiting_approval"
-  | "done"
+  | "closed"
   | "error";
 
 export type ApprovalDecision = "once" | "always" | "deny";
