@@ -47,6 +47,13 @@ def _cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_serve(args: argparse.Namespace) -> int:
+    from .server import run_server
+
+    run_server(host=args.host, port=args.port)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="echlon", description="Local autonomous agent for macOS")
     parser.add_argument("--provider", default=None, help="anthropic | ollama | openai")
@@ -64,6 +71,11 @@ def main(argv: list[str] | None = None) -> int:
     guard.add_argument("--allow-all", action="store_true", help="Permissive: skip all confirmations")
     guard.add_argument("--strict", action="store_true", help="Confirm every shell command and out-of-workspace write")
     p_run.set_defaults(func=_cmd_run)
+
+    p_serve = sub.add_parser("serve", help="Run the local daemon (HTTP/SSE API for the UI)")
+    p_serve.add_argument("--host", default="127.0.0.1")
+    p_serve.add_argument("--port", type=int, default=8765)
+    p_serve.set_defaults(func=_cmd_serve)
 
     args = parser.parse_args(argv)
     try:

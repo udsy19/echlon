@@ -32,6 +32,23 @@ uv run echlon --model anthropic/claude-sonnet-4-6 run "..."
 uv run echlon --provider ollama run "..."     # needs Ollama running
 ```
 
+## Daemon API (for the desktop UI)
+
+`echlon serve` exposes the agent over local HTTP + SSE — the interface the Tauri
+app (Phase 5) consumes. One active task at a time.
+
+```bash
+uv run echlon serve                                   # http://127.0.0.1:8765
+curl -XPOST localhost:8765/run -d '{"task":"..."}'    # -> {"session_id"}
+curl -N "localhost:8765/events?session=<id>"          # SSE: started/plan/tool_call/
+                                                       #      step/approval_request/
+                                                       #      final_answer/done
+curl -XPOST localhost:8765/approve \
+  -d '{"session":"<id>","id":"<approval_id>","decision":"once"}'  # once|always|deny
+```
+
+Risky actions surface as `approval_request` events; the UI answers via `/approve`.
+
 ## Guardrails
 
 Full host access is gated by a configurable policy (default `ask`): reads and

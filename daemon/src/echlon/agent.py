@@ -40,9 +40,15 @@ Operating principles:
 """
 
 
-def build_agent(cfg: EchlonConfig) -> CodeAgent:
-    """Build a configured CodeAgent ready to run a task."""
-    model = build_model(cfg)
+def build_agent(cfg: EchlonConfig, model=None, stream_outputs: bool = True) -> CodeAgent:
+    """Build a configured CodeAgent ready to run a task.
+
+    `model` lets callers inject a model (e.g. a fake in tests); otherwise it is
+    built from config. `stream_outputs` enables token-level streaming for the
+    CLI's live output; the Session API sets it False (it consumes step events
+    and many models/fakes don't implement generate_stream).
+    """
+    model = model or build_model(cfg)
     tools = build_tools(cfg.workspace)
     set_policy(cfg.policy_mode, cfg.workspace)  # type: ignore[arg-type]
     return CodeAgent(
@@ -52,5 +58,5 @@ def build_agent(cfg: EchlonConfig) -> CodeAgent:
         additional_authorized_imports=["*"],  # full host access (PLAN.md §1)
         planning_interval=cfg.planning_interval,
         max_steps=cfg.max_steps,
-        stream_outputs=True,
+        stream_outputs=stream_outputs,
     )
