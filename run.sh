@@ -21,8 +21,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DAEMON="$ROOT/daemon"
 
-# The UI lives in a separate git worktree; locate it without hardcoding the path.
+# The UI app: now in-tree at ./app (post-merge); fall back to a ui worktree.
 ui_app_dir() {
+  if [ -d "$ROOT/app" ]; then echo "$ROOT/app"; return; fi
   local wt
   wt="$(git -C "$ROOT" worktree list 2>/dev/null | awk '/\[ui/{print $1; exit}')"
   [ -n "$wt" ] && [ -d "$wt/app" ] && echo "$wt/app"
