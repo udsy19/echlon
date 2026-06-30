@@ -84,8 +84,17 @@ cmd_serve() { dae echlon serve "$@"; }
 cmd_ui() {
   local ui; ui="$(ui_app_dir)"
   [ -n "$ui" ] || { echo "✖ UI worktree not found (expected a worktree on a 'ui' branch)"; exit 1; }
-  echo "▶ UI dev server (expects the daemon at :8765 — run './run.sh serve' in another terminal)"
-  ( cd "$ui" && "$(npm_runner)" run dev )
+  if ! command -v cargo >/dev/null 2>&1; then
+    echo "✖ The desktop app (Tauri) needs Rust, which isn't installed."
+    echo "  Install it once, then re-run './run.sh ui':"
+    echo "    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y"
+    echo "    source \"\$HOME/.cargo/env\""
+    exit 1
+  fi
+  echo "▶ Desktop app (tauri dev). The daemon must be running too: ./run.sh serve (other terminal)"
+  # tauri dev runs Vite (beforeDevCommand) + compiles the Rust shell. The webview
+  # reaches the daemon only through this Rust shell, so a plain browser won't work.
+  ( cd "$ui" && "$(npm_runner)" tauri dev )
 }
 
 cmd_test() {
