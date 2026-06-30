@@ -23,6 +23,12 @@ from .config import load_config
 from .session import Session
 
 _sessions: dict[str, Session] = {}
+_MAX_BODY = 1 << 20  # 1 MiB request cap
+_MAX_STEPS_LIMIT = 200
+
+
+def _active_session() -> Session | None:
+    return next((s for s in _sessions.values() if s.status == "running"), None)
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -42,42 +48,72 @@ class _Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         if not length:
             return {}
+        if length > _MAX_BODY:
+            return {"__error__": "request body too large"}
         try:
             return json.loads(self.rfile.read(length).decode("utf-8"))
-        except json.JSONDecodeError:
-            return {}
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return {"__error__": "invalid JSON body"}
 
     # --- routes ---
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path == "/health":
             return self._json(200, {"status": "ok"})
+        if parsed.path == "/status":
+            return self._status(parse_qs(parsed.query).get("session", [""])[0])
         if parsed.path == "/events":
             return self._stream_events(parse_qs(parsed.query).get("session", [""])[0])
         self._json(404, {"error": "not found"})
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
+        body = self._read_json()
+        if "__error__" in body:
+            return self._json(400, {"error": body["__error__"]})
         if parsed.path == "/run":
-            return self._start_run(self._read_json())
+            return self._start_run(body)
         if parsed.path == "/approve":
-            return self._approve(self._read_json())
+            return self._approve(body)
+        if parsed.path == "/cancel":
+            return self._cancel(body)
         self._json(404, {"error": "not found"})
 
     def _start_run(self, body: dict) -> None:
         task = body.get("task")
-        if not task:
-            return self._json(400, {"error": "missing 'task'"})
-        cfg = load_config(
-            provider=body.get("provider"),
-            model_id=body.get("model"),
-            workspace=body.get("workspace"),
-            max_steps=body.get("max_steps"),
-            policy_mode=body.get("policy_mode"),
-        )
+        if not task or not isinstance(task, str):
+            return self._json(400, {"error": "missing or invalid 'task'"})
+        max_steps = body.get("max_steps")
+        if max_steps is not None and (not isinstance(max_steps, int) or not 1 <= max_steps <= _MAX_STEPS_LIMIT):
+            return self._json(400, {"error": f"max_steps must be an int in 1..{_MAX_STEPS_LIMIT}"})
+        active = _active_session()
+        if active is not None:
+            return self._json(409, {"error": "a session is already running", "session_id": active.id})
+        try:
+            cfg = load_config(
+                provider=body.get("provider"),
+                model_id=body.get("model"),
+                workspace=body.get("workspace"),
+                max_steps=max_steps,
+                policy_mode=body.get("policy_mode"),
+            )
+        except (ValueError, TypeError) as exc:
+            return self._json(400, {"error": str(exc)})
         session = Session(cfg, task).start()
         _sessions[session.id] = session
         self._json(200, {"session_id": session.id})
+
+    def _cancel(self, body: dict) -> None:
+        session = _sessions.get(body.get("session", ""))
+        if session is None:
+            return self._json(404, {"error": "unknown session"})
+        self._json(200, {"ok": session.cancel(), "status": session.status})
+
+    def _status(self, session_id: str) -> None:
+        session = _sessions.get(session_id)
+        if session is None:
+            return self._json(404, {"error": "unknown session"})
+        self._json(200, {"status": session.status, "result": str(session.result) if session.result is not None else None})
 
     def _approve(self, body: dict) -> None:
         session = _sessions.get(body.get("session", ""))

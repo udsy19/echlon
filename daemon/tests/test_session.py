@@ -65,3 +65,18 @@ def test_session_approval_roundtrip_deny(tmp_path: Path) -> None:
     assert saw_request, "destructive shell should have requested approval"
     assert blocked_in_obs, "the model should have seen the block in an observation"
     assert s.result == "handled the block"
+    assert s.status == "done"
+
+
+def test_session_approval_timeout(tmp_path: Path) -> None:
+    # No one answers the approval; it times out and is treated as deny.
+    model = FakeModel([
+        "<code>\nprint(shell_exec(command='rm -rf /tmp/echlon-timeout-test'))\n</code>",
+        "<code>\nfinal_answer('done after timeout')\n</code>",
+    ])
+    s = Session(_cfg(tmp_path), "destructive then finish", model=model, approval_timeout=0.2).start()
+
+    types = [ev.type for ev in s.events()]
+    assert "approval_request" in types
+    assert "approval_timeout" in types
+    assert s.result == "done after timeout"

@@ -38,12 +38,16 @@ class Event:
 
 
 class Session:
-    def __init__(self, cfg: EchlonConfig, task: str, model=None) -> None:
+    def __init__(self, cfg: EchlonConfig, task: str, model=None, approval_timeout: float | None = None) -> None:
         self.cfg = cfg
         self.task = task
         self.id = uuid.uuid4().hex[:8]
+        self.status = "pending"  # pending | running | done | error | cancelled
         self.result: object | None = None
+        self.approval_timeout = approval_timeout
         self._model = model  # test injection
+        self._agent = None
+        self._cancelled = False
         self._q: queue.Queue[Event | None] = queue.Queue()
         self._approvals: dict[str, queue.Queue[str]] = {}
         self._ctr = itertools.count(1)
@@ -52,12 +56,19 @@ class Session:
     # --- approval bridge (runs on the agent thread) --------------------------
 
     def _prompter(self, summary: str) -> str:
+        if self._cancelled:
+            return "deny"
         aid = f"a{next(self._ctr)}"
         decision_q: queue.Queue[str] = queue.Queue()
         self._approvals[aid] = decision_q
         self._emit("approval_request", {"id": aid, "summary": summary})
-        decision = decision_q.get()  # blocks the agent until the consumer decides
-        self._approvals.pop(aid, None)
+        try:
+            decision = decision_q.get(timeout=self.approval_timeout)
+        except queue.Empty:
+            self._emit("approval_timeout", {"id": aid, "summary": summary})
+            decision = "deny"
+        finally:
+            self._approvals.pop(aid, None)
         return decision if decision in _DECISIONS else "deny"
 
     def decide(self, approval_id: str, decision: str) -> bool:
@@ -66,6 +77,21 @@ class Session:
         if dq is None:
             return False
         dq.put(decision)
+        return True
+
+    def cancel(self) -> bool:
+        """Request graceful cancellation. Interrupts the agent loop and unblocks
+        any pending approval (as a deny). Returns True if the session was running."""
+        if self.status != "running":
+            return False
+        self._cancelled = True
+        if self._agent is not None:
+            try:
+                self._agent.interrupt()
+            except Exception:
+                pass
+        for dq in list(self._approvals.values()):
+            dq.put("deny")
         return True
 
     # --- run / event stream --------------------------------------------------
@@ -79,17 +105,31 @@ class Session:
         return self
 
     def _run(self) -> None:
+        from smolagents import AgentMaxStepsError
+
+        from .tools import browser
+
+        self.status = "running"
         try:
-            agent = build_agent(self.cfg, model=self._model, stream_outputs=False)
+            self._agent = build_agent(self.cfg, model=self._model, stream_outputs=False)
             # Override the policy prompter so confirmations route to this session.
             set_policy(self.cfg.policy_mode, self.cfg.workspace, prompter=self._prompter)  # type: ignore[arg-type]
             self._emit("started", {"task": self.task, "model": self.cfg.model_id})
-            for ev in agent.run(self.task, stream=True):
+            for ev in self._agent.run(self.task, stream=True):
                 self._translate(ev)
+            self.status = "cancelled" if self._cancelled else "done"
+        except AgentMaxStepsError as exc:
+            self.status = "error"
+            self._emit("error", {"message": f"max steps reached: {exc}", "kind": "max_steps"})
         except Exception as exc:  # noqa: BLE001 — surface to the consumer
+            self.status = "cancelled" if self._cancelled else "error"
             self._emit("error", {"message": str(exc)})
         finally:
-            self._emit("done", {})
+            try:
+                browser.reset()  # don't leak browser state into the next session
+            except Exception:
+                pass
+            self._emit("done", {"status": self.status})
             self._q.put(None)  # end-of-stream sentinel
 
     def _translate(self, ev: object) -> None:

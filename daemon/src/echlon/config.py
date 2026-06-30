@@ -40,6 +40,16 @@ class EchlonConfig:
     policy_mode: str = "ask"  # permissive | ask | strict (PLAN.md §4)
 
     def __post_init__(self) -> None:
+        if self.provider not in _PROVIDER_DEFAULTS:
+            raise ValueError(
+                f"unknown provider {self.provider!r} (use {' | '.join(_PROVIDER_DEFAULTS)})"
+            )
+        if self.policy_mode not in ("permissive", "ask", "strict"):
+            raise ValueError(
+                f"unknown policy_mode {self.policy_mode!r} (use permissive | ask | strict)"
+            )
+        if self.max_steps < 1:
+            raise ValueError("max_steps must be >= 1")
         if not self.model_id:
             self.model_id = _PROVIDER_DEFAULTS.get(self.provider, _PROVIDER_DEFAULTS["anthropic"])
         if self.api_base is None:

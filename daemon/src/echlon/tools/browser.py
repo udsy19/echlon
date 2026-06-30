@@ -96,6 +96,14 @@ class _Session:
 _session = _Session()
 
 
+def reset() -> None:
+    """Close the browser and start fresh — call between agent sessions so page
+    state and refs from one task don't leak into the next."""
+    global _session
+    _session.close()
+    _session = _Session()
+
+
 def _snapshot(page: Page) -> str:
     """Render the current page as a ref-tagged accessibility snapshot."""
     try:
