@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+daemon/.venv/
+
+# Secrets / local config
+.env
+daemon/.env
+
+# Agent working directory
+workspace/
+daemon/workspace/
+
+# OS
+.DS_Store
+
+# Claude transient cache
+.claude/sdd-cache/

@@ -1,0 +1,30 @@
+[project]
+name = "echlon"
+version = "0.1.0"
+description = "Local-first autonomous agent for macOS (Manus, on your Mac)"
+readme = "README.md"
+authors = [
+    { name = "Udaya Tejas", email = "udayatejas2004@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "litellm>=1.90.1",
+    "playwright>=1.61.0",
+    "pyobjc-framework-applicationservices>=10.0 ; sys_platform == 'darwin'",
+    "pyobjc-framework-quartz>=10.0 ; sys_platform == 'darwin'",
+    "python-dotenv>=1.2.2",
+    "rich>=15.0.0",
+    "smolagents[litellm,toml]>=1.26.0",
+]
+
+[project.scripts]
+echlon = "echlon.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.8.23,<0.9.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
