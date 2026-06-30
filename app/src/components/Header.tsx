@@ -7,6 +7,7 @@ import { LiveDot } from "./ui/primitives";
 interface HeaderProps {
   health: HealthState;
   onRefreshHealth: () => void;
+  onOpenCapabilities: () => void;
   theme: "light" | "dark";
   onToggleTheme: () => void;
 }
@@ -19,7 +20,7 @@ const HEALTH_LABEL: Record<HealthState, string> = {
 
 /** Glass-morphism header. `pl-20` clears the macOS traffic lights, which overlay
  *  the content because the window uses an overlay title bar. */
-export function Header({ health, onRefreshHealth, theme, onToggleTheme }: HeaderProps) {
+export function Header({ health, onRefreshHealth, onOpenCapabilities, theme, onToggleTheme }: HeaderProps) {
   return (
     <header
       data-tauri-drag-region
@@ -34,6 +35,16 @@ export function Header({ health, onRefreshHealth, theme, onToggleTheme }: Header
         </div>
 
         <nav className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onOpenCapabilities}
+            title="Skills & connectors"
+            className="flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-xs font-mono text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <Icon name="plug" className="w-[14px] h-[14px]" />
+            <span className="hidden sm:inline">capabilities</span>
+          </button>
+
           <button
             type="button"
             onClick={onRefreshHealth}

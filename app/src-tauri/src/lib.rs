@@ -127,6 +127,54 @@ async fn close_session(base: String, session: String) -> Result<bool, String> {
     Ok(body.get("ok").and_then(Value::as_bool).unwrap_or(false))
 }
 
+/// `GET <path>` — fetch a JSON object from the daemon (for /skills, /connectors).
+async fn get_json(base: &str, path: &str) -> Result<Value, String> {
+    let client = http_client(Duration::from_secs(10))?;
+    let resp = client
+        .get(format!("{}{}", normalize_base(base), path))
+        .send()
+        .await
+        .map_err(|e| format!("could not reach the daemon: {e}"))?;
+    resp.json().await.map_err(|e| format!("{e}"))
+}
+
+/// `POST <path>` with a JSON body — returns the daemon's JSON response.
+async fn post_json(base: &str, path: &str, body: Value) -> Result<Value, String> {
+    let client = http_client(Duration::from_secs(180))?; // skill install can clone a repo
+    let resp = client
+        .post(format!("{}{}", normalize_base(base), path))
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("could not reach the daemon: {e}"))?;
+    resp.json().await.map_err(|e| format!("{e}"))
+}
+
+#[tauri::command]
+async fn list_skills(base: String) -> Result<Value, String> {
+    get_json(&base, "/skills").await
+}
+
+#[tauri::command]
+async fn install_skill(base: String, source: String) -> Result<Value, String> {
+    post_json(&base, "/skills/install", serde_json::json!({ "source": source })).await
+}
+
+#[tauri::command]
+async fn list_connectors(base: String) -> Result<Value, String> {
+    get_json(&base, "/connectors").await
+}
+
+#[tauri::command]
+async fn add_connector(base: String, name: String, spec: Value) -> Result<Value, String> {
+    post_json(&base, "/connectors/add", serde_json::json!({ "name": name, "spec": spec })).await
+}
+
+#[tauri::command]
+async fn remove_connector(base: String, name: String) -> Result<Value, String> {
+    post_json(&base, "/connectors/remove", serde_json::json!({ "name": name })).await
+}
+
 /// `POST /approve` — answer a pending approval (`once` | `always` | `deny`).
 #[tauri::command]
 async fn approve(
@@ -238,7 +286,12 @@ pub fn run() {
             cancel_turn,
             close_session,
             approve,
-            stream_events
+            stream_events,
+            list_skills,
+            install_skill,
+            list_connectors,
+            add_connector,
+            remove_connector
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

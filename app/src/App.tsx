@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { Header } from "./components/Header";
 import { Conversation } from "./components/Conversation";
 import { MessageBar } from "./components/MessageBar";
+import { CapabilitiesPanel } from "./components/CapabilitiesPanel";
 import { ConnectionNotice } from "./components/ConnectionNotice";
 import { BackgroundBlobs } from "./components/ui/BackgroundBlobs";
 import { useAgentSession } from "./hooks/useAgentSession";
@@ -13,6 +14,7 @@ export default function App() {
   const { theme, toggle } = useTheme();
   const [config, setConfig] = useState<ConsoleConfig>(DEFAULT_CONFIG);
   const [draft, setDraft] = useState("");
+  const [capsOpen, setCapsOpen] = useState(false);
   const { state: health, refresh: refreshHealth } = useDaemonHealth(config.base);
   const session = useAgentSession(config.base);
 
@@ -30,7 +32,15 @@ export default function App() {
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
       <BackgroundBlobs />
-      <Header health={health} onRefreshHealth={refreshHealth} theme={theme} onToggleTheme={toggle} />
+      <Header
+        health={health}
+        onRefreshHealth={refreshHealth}
+        onOpenCapabilities={() => setCapsOpen(true)}
+        theme={theme}
+        onToggleTheme={toggle}
+      />
+
+      <CapabilitiesPanel open={capsOpen} onClose={() => setCapsOpen(false)} base={config.base} />
 
       {health === "offline" && <ConnectionNotice base={config.base} onRetry={refreshHealth} />}
 

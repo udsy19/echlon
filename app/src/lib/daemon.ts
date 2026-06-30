@@ -3,7 +3,7 @@
  *  cross-origin request itself. */
 
 import { Channel, invoke } from "@tauri-apps/api/core";
-import type { ApprovalDecision, DaemonEvent, RunConfig } from "./types";
+import type { ApprovalDecision, Connector, DaemonEvent, RunConfig, Skill } from "./types";
 
 export const DEFAULT_BASE = "http://127.0.0.1:8765";
 
@@ -63,6 +63,41 @@ export async function approve(
 ): Promise<boolean> {
   if (!isTauri()) throw new Error(NOT_TAURI);
   return invoke<boolean>("approve", { base, session, id, decision });
+}
+
+/** `GET /skills` — installed skills. */
+export async function listSkills(base: string): Promise<Skill[]> {
+  if (!isTauri()) return [];
+  const r = await invoke<{ skills: Skill[] }>("list_skills", { base });
+  return r.skills ?? [];
+}
+
+/** `POST /skills/install` — install a skill from owner/repo (returns a status line). */
+export async function installSkill(base: string, source: string): Promise<string> {
+  if (!isTauri()) throw new Error(NOT_TAURI);
+  const r = await invoke<{ result: string }>("install_skill", { base, source });
+  return r.result;
+}
+
+/** `GET /connectors` — configured MCP connectors. */
+export async function listConnectors(base: string): Promise<Connector[]> {
+  if (!isTauri()) return [];
+  const r = await invoke<{ connectors: Connector[] }>("list_connectors", { base });
+  return r.connectors ?? [];
+}
+
+/** `POST /connectors/add` — add/update a connector (spec is the MCP server object). */
+export async function addConnector(base: string, name: string, spec: unknown): Promise<string> {
+  if (!isTauri()) throw new Error(NOT_TAURI);
+  const r = await invoke<{ result: string }>("add_connector", { base, name, spec });
+  return r.result;
+}
+
+/** `POST /connectors/remove` — remove a connector. */
+export async function removeConnector(base: string, name: string): Promise<string> {
+  if (!isTauri()) throw new Error(NOT_TAURI);
+  const r = await invoke<{ result: string }>("remove_connector", { base, name });
+  return r.result;
 }
 
 /** Open the SSE stream for a session. `onEvent` fires for every event until the

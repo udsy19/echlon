@@ -49,6 +49,19 @@ export interface PendingApproval {
   summary: string;
 }
 
+/** An installed skill (skills.sh / SKILL.md). */
+export interface Skill {
+  name: string;
+  description: string;
+}
+
+/** A configured MCP connector. */
+export interface Connector {
+  name: string;
+  enabled: boolean;
+  where: string;
+}
+
 /** Payload posted to `POST /run`. Only `task` is required. */
 export interface RunConfig {
   task: string;
