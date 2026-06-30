@@ -152,7 +152,7 @@ cmd_test() {
 cmd_help() { awk 'NR>1 && /^#/ {sub(/^# ?/,""); print; next} NR>1 {exit}' "${BASH_SOURCE[0]}"; }
 
 case "${1:-dev}" in
-  dev|start|up) shift; cmd_dev "$@";;
+  dev|start|up) cmd_dev;;
   setup)  shift; cmd_setup "$@";;
   doctor) shift; cmd_doctor "$@";;
   hello)  shift; cmd_hello "$@";;
