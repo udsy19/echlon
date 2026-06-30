@@ -29,11 +29,13 @@ def _cmd_hello(args: argparse.Namespace) -> int:
 
 def _cmd_run(args: argparse.Namespace) -> int:
     """Run the full agent loop on a task (Phase 1)."""
+    policy_mode = "permissive" if args.allow_all else "strict" if args.strict else None
     cfg = load_config(
         provider=args.provider,
         model_id=args.model,
         workspace=args.workspace,
         max_steps=args.max_steps,
+        policy_mode=policy_mode,
     )
     if cfg.provider == "ollama":
         ensure_ollama_ready(cfg)
@@ -58,6 +60,9 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("task", help="The task for the agent to perform")
     p_run.add_argument("--workspace", default=None, help="Working directory for the agent")
     p_run.add_argument("--max-steps", type=int, default=None, dest="max_steps")
+    guard = p_run.add_mutually_exclusive_group()
+    guard.add_argument("--allow-all", action="store_true", help="Permissive: skip all confirmations")
+    guard.add_argument("--strict", action="store_true", help="Confirm every shell command and out-of-workspace write")
     p_run.set_defaults(func=_cmd_run)
 
     args = parser.parse_args(argv)

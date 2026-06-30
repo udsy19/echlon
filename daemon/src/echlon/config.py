@@ -37,6 +37,7 @@ class EchlonConfig:
     workspace: Path = field(default_factory=lambda: Path.cwd() / "workspace")
     max_steps: int = 30
     planning_interval: int | None = 4
+    policy_mode: str = "ask"  # permissive | ask | strict (PLAN.md §4)
 
     def __post_init__(self) -> None:
         if not self.model_id:
@@ -70,6 +71,8 @@ def load_config(**overrides: object) -> EchlonConfig:
         env["workspace"] = Path(v)
     if v := os.getenv("ECHLON_MAX_STEPS"):
         env["max_steps"] = int(v)
+    if v := os.getenv("ECHLON_POLICY_MODE"):
+        env["policy_mode"] = v
 
     env.update({k: v for k, v in overrides.items() if v is not None})
     return EchlonConfig(**env)  # type: ignore[arg-type]

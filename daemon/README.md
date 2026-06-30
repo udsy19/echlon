@@ -32,6 +32,18 @@ uv run echlon --model anthropic/claude-sonnet-4-6 run "..."
 uv run echlon --provider ollama run "..."     # needs Ollama running
 ```
 
+## Guardrails
+
+Full host access is gated by a configurable policy (default `ask`): reads and
+in-workspace writes run freely; destructive shell commands and writes outside
+the workspace are confirmed (interactively) or blocked (non-interactive).
+
+```bash
+uv run echlon run "..."              # ask (default)
+uv run echlon run --allow-all "..."  # permissive — no confirmations
+uv run echlon run --strict "..."     # confirm every shell command
+```
+
 ## Test
 
 ```bash

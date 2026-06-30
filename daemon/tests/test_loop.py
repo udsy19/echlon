@@ -9,6 +9,7 @@ from pathlib import Path
 from smolagents import CodeAgent
 from smolagents.models import ChatMessage, TokenUsage
 
+from echlon.policy import set_policy
 from echlon.tools import build_tools
 
 
@@ -34,6 +35,7 @@ class FakeModel:
 
 def test_loop_executes_tools_on_host(tmp_path: Path) -> None:
     tools = build_tools(tmp_path)
+    set_policy("ask", tmp_path)  # in-workspace writes + non-destructive shell -> no prompt
 
     step1 = (
         "<code>\n"

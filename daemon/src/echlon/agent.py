@@ -11,6 +11,7 @@ from smolagents import CodeAgent
 
 from .config import EchlonConfig
 from .models import build_model
+from .policy import set_policy
 from .tools import build_tools
 
 # Manus-derived operating instructions (PLAN.md §2). Static → cache-stable.
@@ -43,6 +44,7 @@ def build_agent(cfg: EchlonConfig) -> CodeAgent:
     """Build a configured CodeAgent ready to run a task."""
     model = build_model(cfg)
     tools = build_tools(cfg.workspace)
+    set_policy(cfg.policy_mode, cfg.workspace)  # type: ignore[arg-type]
     return CodeAgent(
         tools=tools,
         model=model,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from smolagents import tool
 
+from ..policy import policy
 from . import context
 
 
@@ -34,6 +35,9 @@ def file_write(path: str, content: str) -> str:
         content: Full text content to write.
     """
     p = context.resolve(path)
+    decision = policy().guard_write(p)
+    if not decision.allowed:
+        return decision.message
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(content, encoding="utf-8")
     return f"[ok] wrote {len(content)} chars to {p}"
@@ -51,6 +55,9 @@ def file_edit(path: str, old: str, new: str) -> str:
         new: Replacement text.
     """
     p = context.resolve(path)
+    decision = policy().guard_write(p)
+    if not decision.allowed:
+        return decision.message
     try:
         text = p.read_text(encoding="utf-8")
     except FileNotFoundError:

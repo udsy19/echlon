@@ -6,6 +6,7 @@ import subprocess
 
 from smolagents import tool
 
+from ..policy import policy
 from . import context
 
 
@@ -21,6 +22,9 @@ def shell_exec(command: str, timeout: int = 120) -> str:
         command: The shell command to execute.
         timeout: Maximum seconds to allow the command to run before killing it.
     """
+    decision = policy().guard_shell(command)
+    if not decision.allowed:
+        return decision.message
     try:
         result = subprocess.run(
             command,
