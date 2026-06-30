@@ -12,7 +12,7 @@ from smolagents import CodeAgent
 from .config import EchlonConfig
 from .models import build_model
 from .policy import set_policy
-from .tools import build_tools
+from .tools import build_tools, context as tool_context
 
 # Manus-derived operating instructions (PLAN.md §2). Static → cache-stable.
 INSTRUCTIONS = """\
@@ -40,6 +40,26 @@ Operating principles:
 """
 
 
+_RECITE_CAP = 1500
+
+
+def _recite_todo(step, agent=None) -> None:
+    """Re-inject todo.md at the end of each step's observations (Manus recitation).
+
+    Keeps the current objective in view every step even if the model didn't
+    rewrite the plan that turn, fighting drift on long tasks.
+    """
+    try:
+        todo = tool_context.workspace() / "todo.md"
+        if not todo.exists():
+            return
+        note = "\n\n[current plan — todo.md]\n" + todo.read_text(encoding="utf-8")[:_RECITE_CAP]
+        existing = getattr(step, "observations", None)
+        step.observations = (existing + note) if existing else note.strip()
+    except Exception:
+        pass
+
+
 def build_agent(cfg: EchlonConfig, model=None, stream_outputs: bool = True) -> CodeAgent:
     """Build a configured CodeAgent ready to run a task.
 
@@ -59,4 +79,5 @@ def build_agent(cfg: EchlonConfig, model=None, stream_outputs: bool = True) -> C
         planning_interval=cfg.planning_interval,
         max_steps=cfg.max_steps,
         stream_outputs=stream_outputs,
+        step_callbacks=[_recite_todo],
     )

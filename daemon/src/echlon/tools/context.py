@@ -7,6 +7,7 @@ closures) and smolagents can introspect their signatures cleanly.
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 _workspace: Path = Path.cwd()
@@ -33,3 +34,22 @@ def resolve(path: str) -> Path:
     """
     p = Path(path).expanduser()
     return p if p.is_absolute() else (_workspace / p)
+
+
+def truncate_restorable(text: str, limit: int, label: str = "output") -> str:
+    """Cap an observation but keep it *restorable* (Manus lesson: compression
+    must lose nothing). Oversized text is saved to a file under the workspace and
+    the path is included so the agent can file_read the full content on demand.
+    """
+    if len(text) <= limit:
+        return text
+    obs_dir = _workspace / ".echlon" / "obs"
+    obs_dir.mkdir(parents=True, exist_ok=True)
+    name = hashlib.sha1(text.encode("utf-8")).hexdigest()[:12] + ".txt"
+    path = obs_dir / name
+    path.write_text(text, encoding="utf-8")
+    return (
+        text[:limit]
+        + f"\n... [{label} truncated at {limit} chars — full {len(text)} chars saved to "
+        + f"{path}; use file_read to see the rest]"
+    )

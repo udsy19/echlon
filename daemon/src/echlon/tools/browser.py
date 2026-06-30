@@ -33,6 +33,8 @@ from typing import Callable
 from playwright.sync_api import Page, sync_playwright
 from smolagents import tool
 
+from . import context
+
 _MAX_SNAPSHOT_CHARS = 8000
 
 
@@ -101,12 +103,7 @@ def _snapshot(page: Page) -> str:
     except Exception as exc:  # noqa: BLE001 — surface, don't hide (keep-errors-visible)
         return f"[error] could not snapshot page: {str(exc)[:200]}"
     header = f"# {page.title()}\n{page.url}\n\n"
-    if len(snap) > _MAX_SNAPSHOT_CHARS:
-        snap = snap[:_MAX_SNAPSHOT_CHARS] + (
-            f"\n... [snapshot truncated at {_MAX_SNAPSHOT_CHARS} chars — "
-            "use browser_read_text for full content, or interact to narrow the view]"
-        )
-    return header + snap
+    return header + context.truncate_restorable(snap, _MAX_SNAPSHOT_CHARS, label="snapshot")
 
 
 def _settle(page: Page) -> None:
@@ -199,8 +196,6 @@ def browser_read_text() -> str:
             txt = page.inner_text("body")
         except Exception as exc:  # noqa: BLE001
             return f"[error] could not read page text: {str(exc)[:200]}"
-        if len(txt) > _MAX_SNAPSHOT_CHARS:
-            txt = txt[:_MAX_SNAPSHOT_CHARS] + f"\n... [text truncated at {_MAX_SNAPSHOT_CHARS} chars]"
-        return txt
+        return context.truncate_restorable(txt, _MAX_SNAPSHOT_CHARS, label="page text")
 
     return _session.run(_read)

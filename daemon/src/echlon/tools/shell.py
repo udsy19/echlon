@@ -39,4 +39,6 @@ def shell_exec(command: str, timeout: int = 120) -> str:
 
     output = ((result.stdout or "") + (result.stderr or "")).strip()
     header = f"[exit {result.returncode}]"
-    return f"{header}\n{output}" if output else f"{header} (no output)"
+    if not output:
+        return f"{header} (no output)"
+    return f"{header}\n{context.truncate_restorable(output, 8000, label='shell output')}"
