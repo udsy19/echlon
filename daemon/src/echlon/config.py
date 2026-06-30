@@ -38,6 +38,7 @@ class EchlonConfig:
     skills_dir: Path = field(default_factory=lambda: Path.home() / "echlon" / "skills")
     connectors_file: Path = field(default_factory=lambda: Path.home() / "echlon" / "connectors.json")
     max_steps: int = 30
+    exec_timeout: int = 300  # per code-block wall clock (smolagents default 30s is too low for installs/clones)
     planning_interval: int | None = 4
     policy_mode: str = "ask"  # permissive | ask | strict (PLAN.md §4)
     os_control: bool = True  # expose screen/mouse/keyboard tools (whole-desktop control)
@@ -100,6 +101,8 @@ def load_config(**overrides: object) -> EchlonConfig:
         env["connectors_file"] = Path(v)
     if (v := os.getenv("ECHLON_CONNECTORS")) is not None:
         env["enable_connectors"] = v.strip().lower() not in ("0", "false", "no", "off")
+    if v := os.getenv("ECHLON_EXEC_TIMEOUT"):
+        env["exec_timeout"] = int(v)
 
     env.update({k: v for k, v in overrides.items() if v is not None})
     return EchlonConfig(**env)  # type: ignore[arg-type]

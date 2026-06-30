@@ -73,9 +73,29 @@ def test_index_text_empty_points_to_skills_sh(tmp_path: Path) -> None:
     assert "skills.sh" in skills.index_text()
 
 
+def test_skill_create_persists_learned_skill(tmp_path: Path) -> None:
+    skills.set_skills_dir(tmp_path / "skills")
+    out = skills.skill_create(
+        "Make PPTX Deck",
+        "Build a .pptx from an outline.",
+        "Install with `uv pip install python-pptx` (pip is missing). Use file_write, not open().",
+    )
+    assert "make-pptx-deck" in out  # slugified
+    assert "make-pptx-deck" in skills.skill_list()
+    body = skills.skill_read("make-pptx-deck")
+    assert "uv pip install python-pptx" in body and "file_write" in body
+
+
+def test_skill_create_bundles_script(tmp_path: Path) -> None:
+    skills.set_skills_dir(tmp_path / "skills")
+    skills.skill_create("deckgen", "x", "see script", script_name="build.py", script_body="print('hi')")
+    assert (tmp_path / "skills" / "deckgen" / "build.py").read_text() == "print('hi')"
+    assert "build.py" in skills.skill_read("deckgen")
+
+
 def test_build_tools_includes_skill_tools(tmp_path: Path) -> None:
     names = {t.name for t in build_tools(tmp_path, os_control=False, skills_dir=tmp_path / "sk")}
-    assert {"skill_list", "skill_read", "skill_install"} <= names
+    assert {"skill_list", "skill_read", "skill_install", "skill_create"} <= names
 
 
 def test_build_tools_excludes_skill_tools_when_disabled(tmp_path: Path) -> None:

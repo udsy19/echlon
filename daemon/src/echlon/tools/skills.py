@@ -117,6 +117,38 @@ def skill_read(name: str) -> str:
 
 
 @tool
+def skill_create(name: str, description: str, instructions: str,
+                 script_name: str = "", script_body: str = "") -> str:
+    """Save what you just learned as a reusable skill, so the next time this kind of
+    task comes up you do it instantly instead of rediscovering it.
+
+    Use this after you've figured out a non-obvious procedure: capture the exact
+    working commands, the gotchas you hit (e.g. "pip is missing — use uv pip
+    install"), and how to verify the result. Optionally bundle the working script.
+
+    Args:
+        name: short kebab-case id, e.g. "make-pptx-deck".
+        description: one line on when to use this skill (shown in skill_list).
+        instructions: the full procedure in markdown — exact commands, pitfalls,
+            and verification steps.
+        script_name: optional filename to bundle alongside the skill (e.g. "build_deck.py").
+        script_body: contents for script_name (required if script_name is given).
+    """
+    slug = re.sub(r"[^a-z0-9-]+", "-", name.strip().lower()).strip("-") or "skill"
+    skill = _skills_dir / slug
+    skill.mkdir(parents=True, exist_ok=True)
+    body = instructions.strip()
+    if script_name and script_body:
+        (skill / script_name).write_text(script_body, encoding="utf-8")
+        body += (f"\n\n## Bundled script: `{script_name}`\nIt is saved next to this "
+                 f"SKILL.md in {skill}. Read or run it directly rather than rewriting it.")
+    front = f"---\nname: {slug}\ndescription: {description.strip()}\n---\n\n"
+    (skill / "SKILL.md").write_text(front + body + "\n", encoding="utf-8")
+    return (f"[ok] learned skill '{slug}' saved to {skill}. Next time, skill_list will show it "
+            f"and skill_read('{slug}') will load it.")
+
+
+@tool
 def skill_install(source: str) -> str:
     """Acquire a new skill from a GitHub repo (skills.sh-compatible) or local path.
 
@@ -168,4 +200,4 @@ def skill_install(source: str) -> str:
             f"Call skill_read('{installed[0]}') to load it.")
 
 
-SKILL_TOOLS = [skill_list, skill_read, skill_install]
+SKILL_TOOLS = [skill_list, skill_read, skill_install, skill_create]
