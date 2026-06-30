@@ -3,6 +3,7 @@ import type { ApprovalDecision, TimelineEvent } from "../lib/types";
 import { cn } from "../lib/cn";
 import { Icon, type IconName } from "./ui/Icon";
 import { ApprovalPrompt } from "./ApprovalPrompt";
+import { Markdown } from "./ui/Markdown";
 
 /** Scrollable monospace block for tool arguments / observations / answers. */
 function CodeBlock({ text, tone = "default" }: { text: string; tone?: "default" | "error" }) {
@@ -82,9 +83,7 @@ export function EventRow({ event, isPending, onDecide }: EventRowProps) {
     case "plan":
       return (
         <Row meta={{ icon: "list", label: "plan" }} time={event._at}>
-          <p className="selectable text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap">
-            {event.data.plan}
-          </p>
+          <Markdown className="text-muted-foreground">{event.data.plan}</Markdown>
         </Row>
       );
 
@@ -115,7 +114,7 @@ export function EventRow({ event, isPending, onDecide }: EventRowProps) {
     case "final_answer":
       return (
         <Row meta={{ icon: "check", label: "final answer", accent: "emerald" }} time={event._at} highlighted>
-          <p className="selectable text-[15px] leading-relaxed whitespace-pre-wrap">{event.data.output}</p>
+          <Markdown className="text-[15px]">{event.data.output}</Markdown>
         </Row>
       );
 
