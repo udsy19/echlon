@@ -194,6 +194,11 @@ class Session:
             browser.reset()  # release browser only when the conversation ends
         except Exception:
             pass
+        try:
+            from .tools import connectors
+            connectors.close_all()  # disconnect MCP connectors opened this session
+        except Exception:
+            pass
         self.status = "closed"
         self._emit("closed", {"turns": self._turn})
         log.info("session closed", extra={"session": self.id, "turns": self._turn})

@@ -67,6 +67,14 @@ Operating principles:
   https://skills.sh and call skill_install('owner/repo'), then read and follow it —
   acquire the capability rather than improvising. A skill's own scripts run under
   the guardrail like any other command.
+- INTEGRATE VIA CONNECTORS OR THE LOGGED-IN BROWSER. For external services
+  (calendar, email, drive, github, …) prefer an MCP connector: call connector_list
+  to see what's configured; add one with connector_add and verify it with
+  connector_test, fixing the spec or installing the server until it works. When no
+  connector/API exists, use the browser — it runs a persistent profile signed in to
+  the user's accounts: open the service's site (e.g. calendar.google.com) and act
+  directly; if it isn't signed in yet, open the login page and ask the user to sign
+  in, then continue on your next turn.
 - BE TRUTHFUL ABOUT WHAT YOU DID. Never claim you "opened" or "launched" something
   you only tested. Distinguish "I verified it runs" from "I opened it for you". If a
   step was a quick smoke check, say so. Report exactly what happened, no more.
@@ -111,6 +119,7 @@ def build_agent(cfg: EchlonConfig, model=None, stream_outputs: bool = True,
     tools = build_tools(
         cfg.workspace, os_control=cfg.os_control,
         skills_dir=cfg.skills_dir if cfg.enable_skills else None,
+        connectors_file=cfg.connectors_file if cfg.enable_connectors else None,
     )
     set_policy(cfg.policy_mode, cfg.workspace)  # type: ignore[arg-type]
     # Compose the system prompt with the live skills index (metadata only — full

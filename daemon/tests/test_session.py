@@ -25,7 +25,8 @@ class FakeModel:
 def _cfg(tmp_path: Path) -> EchlonConfig:
     return EchlonConfig(provider="anthropic", workspace=tmp_path, policy_mode="ask",
                         planning_interval=None, os_control=False,
-                        skills_dir=tmp_path / "skills")
+                        skills_dir=tmp_path / "skills",
+                        connectors_file=tmp_path / "connectors.json")
 
 
 def _collect_until(session: Session, stop_type: str, start: int = 0, on=None) -> list:
