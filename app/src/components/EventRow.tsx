@@ -119,6 +119,15 @@ export function EventRow({ event, isPending, onDecide }: EventRowProps) {
         </Row>
       );
 
+    case "approval_timeout":
+      return (
+        <Row meta={{ icon: "shield", label: "approval timed out", accent: "destructive" }} time={event._at}>
+          <p className="selectable text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap">
+            No response in time — the daemon denied this action and continued.
+          </p>
+        </Row>
+      );
+
     case "error":
       return (
         <Row meta={{ icon: "alert", label: "error", accent: "destructive" }} time={event._at}>

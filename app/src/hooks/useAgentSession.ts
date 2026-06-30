@@ -60,6 +60,12 @@ export function useAgentSession(base: string) {
             pending: [...s.pending, { id: event.data.id, summary: event.data.summary }],
             status: "awaiting_approval",
           };
+        case "approval_timeout": {
+          // The daemon timed the request out (treated as deny); drop the prompt
+          // so the UI doesn't stay stuck waiting on an answer it can't give.
+          const pending = s.pending.filter((p) => p.id !== event.data.id);
+          return { ...s, events, pending, status: pending.length ? "awaiting_approval" : "running" };
+        }
         case "final_answer":
           return { ...s, events, finalAnswer: event.data.output };
         case "error":

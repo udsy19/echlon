@@ -8,9 +8,10 @@ export type DaemonEvent =
   | { type: "tool_call"; data: { name: string; arguments: string } }
   | { type: "step"; data: { step: number; observations: string; error: string | null } }
   | { type: "approval_request"; data: { id: string; summary: string } }
+  | { type: "approval_timeout"; data: { id: string; summary: string } }
   | { type: "final_answer"; data: { output: string } }
-  | { type: "error"; data: { message: string } }
-  | { type: "done"; data: Record<string, never> }
+  | { type: "error"; data: { message: string; kind?: string } }
+  | { type: "done"; data: { status?: string } }
   | { type: "__closed"; data?: Record<string, never> };
 
 export type DaemonEventType = DaemonEvent["type"];
