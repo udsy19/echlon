@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 # Claude is the default driver; open-source models are first-class swaps.
 _PROVIDER_DEFAULTS = {
     "anthropic": "anthropic/claude-opus-4-8",
-    "ollama": "ollama_chat/qwen3:32b",
+    "ollama": "ollama_chat/qwen2.5-coder:7b",
     "openai": "openai/gpt-4o",
 }
 
