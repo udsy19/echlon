@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "litellm>=1.90.1",
+    "playwright>=1.61.0",
     "python-dotenv>=1.2.2",
     "rich>=15.0.0",
     "smolagents[litellm,toml]>=1.26.0",
