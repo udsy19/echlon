@@ -109,11 +109,12 @@ function SkillsSection({ base, skills, onChanged }: { base: string; skills: Skil
     <section>
       <Eyebrow uppercase className="mb-3">Skills</Eyebrow>
       <p className="mb-3 text-sm text-muted-foreground">
-        Give the agent new know-how. Browse{" "}
+        The agent acquires skills from{" "}
         <a href="https://skills.sh" target="_blank" rel="noreferrer" className="text-emerald-500 underline underline-offset-2">
           skills.sh
         </a>{" "}
-        and install by <span className="font-mono text-xs">owner/repo</span>.
+        on its own, and writes new ones as it learns. You don’t need to manage this —
+        but you can add one manually by <span className="font-mono text-xs">owner/repo</span>.
       </p>
       <div className="mb-3 flex gap-2">
         <TextInput
@@ -193,7 +194,8 @@ function ConnectorsSection({
     <section>
       <Eyebrow uppercase className="mb-3">Connectors (MCP)</Eyebrow>
       <p className="mb-3 text-sm text-muted-foreground">
-        Integrations the agent can use (calendar, gmail, github…). Changes apply on the next conversation.
+        Integrations (calendar, gmail, github…). The agent sets these up itself when a task needs
+        one — this is just to see or tweak them. Changes apply on the next conversation.
       </p>
 
       {connectors.length > 0 && (
