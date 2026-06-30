@@ -48,7 +48,9 @@ class Session:
         self._model = model  # test injection
         self._agent = None
         self._cancelled = False
-        self._q: queue.Queue[Event | None] = queue.Queue()
+        self._log: list[Event] = []          # full buffer -> replay on reconnect
+        self._cv = threading.Condition()
+        self._finished = False
         self._approvals: dict[str, queue.Queue[str]] = {}
         self._ctr = itertools.count(1)
         self._thread: threading.Thread | None = None
@@ -97,7 +99,9 @@ class Session:
     # --- run / event stream --------------------------------------------------
 
     def _emit(self, type_: str, data: dict | None = None) -> None:
-        self._q.put(Event(type_, data or {}))
+        with self._cv:
+            self._log.append(Event(type_, data or {}))
+            self._cv.notify_all()
 
     def start(self) -> "Session":
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -130,7 +134,9 @@ class Session:
             except Exception:
                 pass
             self._emit("done", {"status": self.status})
-            self._q.put(None)  # end-of-stream sentinel
+            with self._cv:
+                self._finished = True
+                self._cv.notify_all()
 
     def _translate(self, ev: object) -> None:
         name = type(ev).__name__
@@ -151,12 +157,22 @@ class Session:
             self.result = ev.output  # type: ignore[attr-defined]
             self._emit("final_answer", {"output": str(ev.output)})  # type: ignore[attr-defined]
 
-    def events(self):
-        """Yield Events until the end-of-stream sentinel (blocking)."""
+    def events(self, start: int = 0):
+        """Yield Events from index `start` until the stream finishes (blocking).
+
+        Buffered, so a reconnecting consumer can pass the count it already saw
+        and get exactly the events it missed, then tail live ones — SSE has no
+        replay of its own.
+        """
+        i = start
         while True:
-            ev = self._q.get()
-            if ev is None:
-                return
+            with self._cv:
+                while i >= len(self._log) and not self._finished:
+                    self._cv.wait()
+                if i >= len(self._log) and self._finished:
+                    return
+                ev = self._log[i]
+            i += 1
             yield ev
 
     def wait(self, timeout: float | None = None) -> None:

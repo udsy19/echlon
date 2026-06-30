@@ -11,14 +11,13 @@ import sys
 
 from .agent import build_agent
 from .config import load_config
-from .models import build_model, ensure_ollama_ready
+from .models import build_model, ensure_ready
 
 
 def _cmd_hello(args: argparse.Namespace) -> int:
     """One Claude round-trip through the provider abstraction (Phase 0 check)."""
     cfg = load_config(provider=args.provider, model_id=args.model)
-    if cfg.provider == "ollama":
-        ensure_ollama_ready(cfg)
+    ensure_ready(cfg)
     model = build_model(cfg)
     msg = [{"role": "user", "content": [{"type": "text", "text": "Reply with exactly: echlon online"}]}]
     resp = model.generate(msg)
@@ -37,8 +36,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         max_steps=args.max_steps,
         policy_mode=policy_mode,
     )
-    if cfg.provider == "ollama":
-        ensure_ollama_ready(cfg)
+    ensure_ready(cfg)
     print(f"[echlon] model={cfg.model_id} workspace={cfg.workspace} max_steps={cfg.max_steps}\n")
     agent = build_agent(cfg)
     result = agent.run(args.task)

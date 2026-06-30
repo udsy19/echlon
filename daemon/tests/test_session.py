@@ -68,6 +68,22 @@ def test_session_approval_roundtrip_deny(tmp_path: Path) -> None:
     assert s.status == "done"
 
 
+def test_session_event_replay(tmp_path: Path) -> None:
+    model = FakeModel([
+        "<code>\nprint(file_write(path='r.txt', content='x'))\n</code>",
+        "<code>\nfinal_answer('ok')\n</code>",
+    ])
+    s = Session(_cfg(tmp_path), "write then finish", model=model).start()
+
+    first = [ev.type for ev in s.events()]          # consume to completion
+    replay = [ev.type for ev in s.events(0)]         # reconnect from start
+    partial = [ev.type for ev in s.events(2)]        # reconnect from an offset
+
+    assert replay == first                            # full replay after finish
+    assert partial == first[2:]                       # offset replay
+    assert first[0] == "started" and first[-1] == "done"
+
+
 def test_session_approval_timeout(tmp_path: Path) -> None:
     # No one answers the approval; it times out and is treated as deny.
     model = FakeModel([

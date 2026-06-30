@@ -16,6 +16,27 @@ def test_build_model_anthropic_default() -> None:
     assert m.model_id == "anthropic/claude-opus-4-8"
 
 
+def test_config_rejects_bad_provider() -> None:
+    with pytest.raises(ValueError, match="provider"):
+        EchlonConfig(provider="bogus")
+
+
+def test_config_rejects_bad_policy_mode() -> None:
+    with pytest.raises(ValueError, match="policy_mode"):
+        EchlonConfig(policy_mode="bogus")
+
+
+def test_anthropic_ready_ok(monkeypatch) -> None:
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    models.ensure_anthropic_ready(EchlonConfig(provider="anthropic"))  # no raise
+
+
+def test_anthropic_ready_missing(monkeypatch) -> None:
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
+        models.ensure_anthropic_ready(EchlonConfig(provider="anthropic"))
+
+
 def test_build_model_ollama_sets_api_base_and_key() -> None:
     cfg = EchlonConfig(provider="ollama", model_id="ollama_chat/qwen2.5-coder:3b")
     m = models.build_model(cfg)

@@ -20,6 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from .config import load_config
+from .models import ensure_ready
 from .session import Session
 
 _sessions: dict[str, Session] = {}
@@ -63,7 +64,12 @@ class _Handler(BaseHTTPRequestHandler):
         if parsed.path == "/status":
             return self._status(parse_qs(parsed.query).get("session", [""])[0])
         if parsed.path == "/events":
-            return self._stream_events(parse_qs(parsed.query).get("session", [""])[0])
+            q = parse_qs(parsed.query)
+            try:
+                start = int(q.get("from", ["0"])[0])
+            except ValueError:
+                start = 0
+            return self._stream_events(q.get("session", [""])[0], start)
         self._json(404, {"error": "not found"})
 
     def do_POST(self) -> None:
@@ -99,6 +105,10 @@ class _Handler(BaseHTTPRequestHandler):
             )
         except (ValueError, TypeError) as exc:
             return self._json(400, {"error": str(exc)})
+        try:
+            ensure_ready(cfg)
+        except RuntimeError as exc:
+            return self._json(400, {"error": str(exc)})
         session = Session(cfg, task).start()
         _sessions[session.id] = session
         self._json(200, {"session_id": session.id})
@@ -122,7 +132,7 @@ class _Handler(BaseHTTPRequestHandler):
         ok = session.decide(body.get("id", ""), body.get("decision", "deny"))
         self._json(200, {"ok": ok})
 
-    def _stream_events(self, session_id: str) -> None:
+    def _stream_events(self, session_id: str, start: int = 0) -> None:
         session = _sessions.get(session_id)
         if session is None:
             return self._json(404, {"error": "unknown session"})
@@ -130,7 +140,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()
-        for event in session.events():
+        for event in session.events(start):
             chunk = f"data: {json.dumps(event.to_dict())}\n\n".encode("utf-8")
             try:
                 self.wfile.write(chunk)

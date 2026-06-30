@@ -14,6 +14,7 @@ only an Ollama preflight, which LiteLLM does not provide.
 from __future__ import annotations
 
 import json
+import os
 import urllib.error
 import urllib.request
 
@@ -43,6 +44,25 @@ def build_model(cfg: EchlonConfig) -> LiteLLMModel:
         # requires a non-empty one for openai-compatible routes.
         kwargs["api_key"] = "not-needed"
     return LiteLLMModel(**kwargs)  # type: ignore[arg-type]
+
+
+def ensure_anthropic_ready(cfg: EchlonConfig) -> None:
+    """Fail early if no Anthropic credential is available (LiteLLM's auth error
+    is opaque and only surfaces mid-run)."""
+    if cfg.api_key or os.getenv("ANTHROPIC_API_KEY"):
+        return
+    raise RuntimeError(
+        "ANTHROPIC_API_KEY is not set. Add it to daemon/.env (or the environment), "
+        "or run with a local model: --provider ollama."
+    )
+
+
+def ensure_ready(cfg: EchlonConfig) -> None:
+    """Provider-appropriate preflight."""
+    if cfg.provider == "anthropic":
+        ensure_anthropic_ready(cfg)
+    elif cfg.provider == "ollama":
+        ensure_ollama_ready(cfg)
 
 
 def _ollama_model_name(model_id: str) -> str:
