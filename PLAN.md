@@ -7,6 +7,15 @@ access, and able to run on closed (Claude) **or** open-source (Qwen/etc.) models
 
 ---
 
+## 0. Status (2026-06-29)
+
+Done + live-verified: **Phase 0–1** (loop on host), **Phase 2** (browser + context-eng
+refinements: recitation, restorable compression), **Phase 3** (open-source models),
+**Phase 4** (guardrails), **Phase 5-prep** (daemon session API + HTTP/SSE server).
+27 tests passing. Tracked in PR #1.
+
+Remaining: **Phase 5 UI** (Tauri — needs a Rust toolchain), **Phase 6** (packaging/signing).
+
 ## 1. Decisions (locked)
 
 | Decision | Choice | Consequence |
