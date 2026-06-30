@@ -13,6 +13,7 @@ from .config import EchlonConfig
 from .models import build_model
 from .policy import set_policy
 from .tools import build_tools, context as tool_context
+from .tools.computer import attach_screenshot_step
 
 # Manus-derived operating instructions (PLAN.md §2). Static → cache-stable.
 INSTRUCTIONS = """\
@@ -35,6 +36,15 @@ Operating principles:
   browser_click, browser_type, browser_read_text). Each snapshot tags interactive
   elements as [ref=eN]; act on an element by passing its ref. Take a fresh
   snapshot after navigation, since refs change when the page changes.
+- TO CONTROL NON-BROWSER APPS (Finder, Mail, native apps, system dialogs), use the
+  computer_* tools: computer_screenshot to see the screen, then computer_click /
+  computer_move / computer_type / computer_key / computer_scroll to act. Workflow:
+  call computer_screenshot and END THE TURN; the image arrives on your NEXT step;
+  read off the pixel coordinates of what you want and act; then screenshot again to
+  confirm. Coordinates are pixels from the image's top-left. Prefer shell_exec or
+  the browser when they can do the job — screen control is the fallback for GUI-only
+  apps, and it needs a vision-capable model plus macOS Screen-Recording/Accessibility
+  permissions (a tool will tell you if a permission is missing).
 - FINISH. The task is done only when you have verified the result actually works
   (e.g. the program runs without error). Then call final_answer with a short summary.
 """
@@ -69,8 +79,11 @@ def build_agent(cfg: EchlonConfig, model=None, stream_outputs: bool = True) -> C
     and many models/fakes don't implement generate_stream).
     """
     model = model or build_model(cfg)
-    tools = build_tools(cfg.workspace)
+    tools = build_tools(cfg.workspace, os_control=cfg.os_control)
     set_policy(cfg.policy_mode, cfg.workspace)  # type: ignore[arg-type]
+    callbacks = [_recite_todo]
+    if cfg.os_control:
+        callbacks.append(attach_screenshot_step)  # surface screenshots to the model
     return CodeAgent(
         tools=tools,
         model=model,
@@ -79,5 +92,5 @@ def build_agent(cfg: EchlonConfig, model=None, stream_outputs: bool = True) -> C
         planning_interval=cfg.planning_interval,
         max_steps=cfg.max_steps,
         stream_outputs=stream_outputs,
-        step_callbacks=[_recite_todo],
+        step_callbacks=callbacks,
     )

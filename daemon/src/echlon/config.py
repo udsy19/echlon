@@ -38,6 +38,7 @@ class EchlonConfig:
     max_steps: int = 30
     planning_interval: int | None = 4
     policy_mode: str = "ask"  # permissive | ask | strict (PLAN.md §4)
+    os_control: bool = True  # expose screen/mouse/keyboard tools (whole-desktop control)
 
     def __post_init__(self) -> None:
         if self.provider not in _PROVIDER_DEFAULTS:
@@ -83,6 +84,8 @@ def load_config(**overrides: object) -> EchlonConfig:
         env["max_steps"] = int(v)
     if v := os.getenv("ECHLON_POLICY_MODE"):
         env["policy_mode"] = v
+    if (v := os.getenv("ECHLON_OS_CONTROL")) is not None:
+        env["os_control"] = v.strip().lower() not in ("0", "false", "no", "off")
 
     env.update({k: v for k, v in overrides.items() if v is not None})
     return EchlonConfig(**env)  # type: ignore[arg-type]

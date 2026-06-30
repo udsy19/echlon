@@ -128,6 +128,7 @@ class _Handler(BaseHTTPRequestHandler):
                 workspace=body.get("workspace"),
                 max_steps=max_steps,
                 policy_mode=body.get("policy_mode"),
+                os_control=body.get("os_control"),
             )
         except (ValueError, TypeError) as exc:
             return self._json(400, {"error": str(exc)})

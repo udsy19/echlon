@@ -35,6 +35,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         workspace=args.workspace,
         max_steps=args.max_steps,
         policy_mode=policy_mode,
+        os_control=False if args.no_os_control else None,
     )
     ensure_ready(cfg)
     print(f"[echlon] model={cfg.model_id} workspace={cfg.workspace} max_steps={cfg.max_steps}\n")
@@ -68,6 +69,8 @@ def main(argv: list[str] | None = None) -> int:
     guard = p_run.add_mutually_exclusive_group()
     guard.add_argument("--allow-all", action="store_true", help="Permissive: skip all confirmations")
     guard.add_argument("--strict", action="store_true", help="Confirm every shell command and out-of-workspace write")
+    p_run.add_argument("--no-os-control", action="store_true", dest="no_os_control",
+                       help="Disable whole-desktop screen/mouse/keyboard tools")
     p_run.set_defaults(func=_cmd_run)
 
     p_serve = sub.add_parser("serve", help="Run the local daemon (HTTP/SSE API for the UI)")
