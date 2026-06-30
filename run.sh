@@ -2,12 +2,13 @@
 #
 # Echlon launcher — one entry point for running and testing the app.
 #
+#   ./run.sh                  start everything: the daemon + the desktop app
 #   ./run.sh setup            install deps (daemon + UI) and browser
 #   ./run.sh doctor           check the environment is ready (keys, perms, deps)
 #   ./run.sh hello            one model round-trip (cheapest end-to-end check)
 #   ./run.sh task "<task>"    run the agent on a task in the terminal (pass flags too)
-#   ./run.sh serve            start the daemon (HTTP/SSE on :8765) for the UI
-#   ./run.sh ui               start the desktop UI dev server (needs `serve` running)
+#   ./run.sh serve            start only the daemon (HTTP/SSE on :8765)
+#   ./run.sh ui               start only the desktop app (needs the daemon running)
 #   ./run.sh test             run the test suites (daemon pytest + UI typecheck)
 #   ./run.sh help             show this help
 #
@@ -98,6 +99,44 @@ cmd_ui() {
   ( cd "$ui" && "$(npm_runner)" tauri dev )
 }
 
+cmd_dev() {
+  need_uv
+  local ui; ui="$(ui_app_dir)"
+  [ -n "$ui" ] || { echo "✖ UI app not found (expected ./app)"; exit 1; }
+  if ! command -v cargo >/dev/null 2>&1; then
+    echo "✖ The desktop app (Tauri) needs Rust. Install it once, then re-run ./run.sh:"
+    echo "    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y"
+    echo "    source \"\$HOME/.cargo/env\""
+    exit 1
+  fi
+
+  local log="${TMPDIR:-/tmp}/echlon-daemon.log"
+  local started=0
+  if curl -s -m 2 http://127.0.0.1:8765/health 2>/dev/null | grep -q ok; then
+    echo "▶ daemon already running on :8765"
+  else
+    echo "▶ starting daemon on :8765 (logs: $log)"
+    ( cd "$DAEMON" && uv run echlon serve ) >"$log" 2>&1 &
+    started=1
+    for _ in $(seq 1 20); do  # wait up to ~10s for it to answer
+      if curl -s -m 1 http://127.0.0.1:8765/health 2>/dev/null | grep -q ok; then break; fi
+      sleep 0.5
+    done
+  fi
+
+  # When the desktop app exits (or Ctrl-C), stop the daemon we started.
+  cleanup() {
+    if [ "$started" = 1 ]; then
+      echo; echo "▶ stopping daemon…"
+      pkill -f "echlon serve" 2>/dev/null || true
+    fi
+  }
+  trap cleanup EXIT INT TERM
+
+  echo "▶ starting desktop app — the first Rust build takes a few minutes…"
+  ( cd "$ui" && "$(npm_runner)" tauri dev )
+}
+
 cmd_test() {
   echo "▶ daemon tests (pytest)…"
   dae pytest -q
@@ -108,9 +147,12 @@ cmd_test() {
   fi
 }
 
-cmd_help() { sed -n '2,30p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+# Print the leading comment block (everything after the shebang up to the first
+# non-comment line), so help stays correct as the header changes.
+cmd_help() { awk 'NR>1 && /^#/ {sub(/^# ?/,""); print; next} NR>1 {exit}' "${BASH_SOURCE[0]}"; }
 
-case "${1:-help}" in
+case "${1:-dev}" in
+  dev|start|up) shift; cmd_dev "$@";;
   setup)  shift; cmd_setup "$@";;
   doctor) shift; cmd_doctor "$@";;
   hello)  shift; cmd_hello "$@";;
