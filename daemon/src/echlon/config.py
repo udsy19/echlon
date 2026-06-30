@@ -34,7 +34,7 @@ class EchlonConfig:
     model_id: str = ""
     api_key: str | None = None
     api_base: str | None = None
-    workspace: Path = field(default_factory=lambda: Path.cwd() / "workspace")
+    workspace: Path = field(default_factory=lambda: Path.home() / "echlon" / "workspace")
     max_steps: int = 30
     planning_interval: int | None = 4
     policy_mode: str = "ask"  # permissive | ask | strict (PLAN.md §4)
