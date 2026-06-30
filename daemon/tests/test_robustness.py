@@ -38,7 +38,7 @@ def _reset_registry(entries) -> None:
 
 def test_gc_evicts_oldest_finished_beyond_cap(monkeypatch) -> None:
     monkeypatch.setattr(server, "_MAX_SESSIONS", 3)
-    _reset_registry([_FakeSession(f"s{i}", "done") for i in range(5)])  # 5 > cap 3
+    _reset_registry([_FakeSession(f"s{i}", "closed") for i in range(5)])  # 5 > cap 3
 
     evicted = server._gc_sessions()
 
@@ -46,22 +46,22 @@ def test_gc_evicts_oldest_finished_beyond_cap(monkeypatch) -> None:
     assert list(server._sessions) == ["s2", "s3", "s4"]  # oldest two reclaimed
 
 
-def test_gc_never_evicts_running(monkeypatch) -> None:
+def test_gc_never_evicts_open_session(monkeypatch) -> None:
     monkeypatch.setattr(server, "_MAX_SESSIONS", 1)
     _reset_registry([
-        _FakeSession("running", "running"),
-        _FakeSession("old", "done"),
-        _FakeSession("new", "done"),
+        _FakeSession("open", "running"),  # an open conversation (idle/running)
+        _FakeSession("old", "closed"),
+        _FakeSession("new", "closed"),
     ])
 
     server._gc_sessions()
 
-    assert "running" in server._sessions  # the active session survives the GC
-    assert "old" not in server._sessions  # finished ones are reclaimed first
+    assert "open" in server._sessions  # the open conversation survives the GC
+    assert "old" not in server._sessions  # closed ones are reclaimed first
 
 
 def test_gc_noop_under_cap(monkeypatch) -> None:
     monkeypatch.setattr(server, "_MAX_SESSIONS", 10)
-    _reset_registry([_FakeSession(f"s{i}", "done") for i in range(3)])
+    _reset_registry([_FakeSession(f"s{i}", "closed") for i in range(3)])
     assert server._gc_sessions() == 0
     assert len(server._sessions) == 3

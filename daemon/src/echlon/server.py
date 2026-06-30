@@ -29,12 +29,13 @@ log = get_logger(__name__)
 _sessions: dict[str, Session] = {}
 _MAX_BODY = 1 << 20  # 1 MiB request cap
 _MAX_STEPS_LIMIT = 200
-_MAX_SESSIONS = 64  # retain at most this many; oldest *finished* ones are evicted
-_TERMINAL = ("done", "error", "cancelled")
+_MAX_SESSIONS = 64  # retain at most this many; oldest *closed* ones are evicted
+_TERMINAL = ("closed",)
 
 
 def _active_session() -> Session | None:
-    return next((s for s in _sessions.values() if s.status == "running"), None)
+    """The currently open conversation (idle or running), if any."""
+    return next((s for s in _sessions.values() if s.status != "closed"), None)
 
 
 def _gc_sessions() -> int:
@@ -105,10 +106,14 @@ class _Handler(BaseHTTPRequestHandler):
             return self._json(400, {"error": body["__error__"]})
         if parsed.path == "/run":
             return self._start_run(body)
+        if parsed.path == "/message":
+            return self._message(body)
         if parsed.path == "/approve":
             return self._approve(body)
         if parsed.path == "/cancel":
             return self._cancel(body)
+        if parsed.path == "/close":
+            return self._close(body)
         self._json(404, {"error": "not found"})
 
     def _start_run(self, body: dict) -> None:
@@ -137,18 +142,37 @@ class _Handler(BaseHTTPRequestHandler):
         except RuntimeError as exc:
             return self._json(400, {"error": str(exc)})
         _gc_sessions()
-        session = Session(cfg, task).start()
+        session = Session(cfg)
         _sessions[session.id] = session
+        session.send(task)  # first turn
         log.info("run started", extra={"session": session.id, "model": cfg.model_id,
                                        "policy": cfg.policy_mode, "max_steps": cfg.max_steps})
         self._json(200, {"session_id": session.id})
+
+    def _message(self, body: dict) -> None:
+        session = _sessions.get(body.get("session", ""))
+        if session is None:
+            return self._json(404, {"error": "unknown session"})
+        text = body.get("text")
+        if not text or not isinstance(text, str):
+            return self._json(400, {"error": "missing or invalid 'text'"})
+        result = session.send(text)
+        code = 200 if result.get("ok") else 409
+        self._json(code, result)
 
     def _cancel(self, body: dict) -> None:
         session = _sessions.get(body.get("session", ""))
         if session is None:
             return self._json(404, {"error": "unknown session"})
         ok = session.cancel()
-        log.info("run cancel requested", extra={"session": session.id, "ok": ok})
+        log.info("turn cancel requested", extra={"session": session.id, "ok": ok})
+        self._json(200, {"ok": ok, "status": session.status})
+
+    def _close(self, body: dict) -> None:
+        session = _sessions.get(body.get("session", ""))
+        if session is None:
+            return self._json(404, {"error": "unknown session"})
+        ok = session.close()
         self._json(200, {"ok": ok, "status": session.status})
 
     def _status(self, session_id: str) -> None:

@@ -83,6 +83,14 @@ def test_run_rejects_invalid_json(base_url) -> None:
         assert e.code == 400
 
 
+def test_message_unknown_session(base_url) -> None:
+    assert _post(f"{base_url}/message", {"session": "nope", "text": "hi"})[0] == 404
+
+
+def test_close_unknown_session(base_url) -> None:
+    assert _post(f"{base_url}/close", {"session": "nope"})[0] == 404
+
+
 def test_run_409_when_busy(base_url) -> None:
     # Inject a stand-in "running" session; /run must refuse a second.
     class _Busy:

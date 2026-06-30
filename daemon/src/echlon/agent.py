@@ -88,13 +88,16 @@ def _recite_todo(step, agent=None) -> None:
         pass
 
 
-def build_agent(cfg: EchlonConfig, model=None, stream_outputs: bool = True) -> CodeAgent:
+def build_agent(cfg: EchlonConfig, model=None, stream_outputs: bool = True,
+                extra_callbacks=None) -> CodeAgent:
     """Build a configured CodeAgent ready to run a task.
 
     `model` lets callers inject a model (e.g. a fake in tests); otherwise it is
     built from config. `stream_outputs` enables token-level streaming for the
     CLI's live output; the Session API sets it False (it consumes step events
-    and many models/fakes don't implement generate_stream).
+    and many models/fakes don't implement generate_stream). `extra_callbacks`
+    are per-session step callbacks (e.g. a steer-message drain) appended after
+    the built-ins.
     """
     model = model or build_model(cfg)
     tools = build_tools(cfg.workspace, os_control=cfg.os_control)
@@ -102,6 +105,8 @@ def build_agent(cfg: EchlonConfig, model=None, stream_outputs: bool = True) -> C
     callbacks = [_recite_todo]
     if cfg.os_control:
         callbacks.append(attach_screenshot_step)  # surface screenshots to the model
+    if extra_callbacks:
+        callbacks.extend(extra_callbacks)
     return CodeAgent(
         tools=tools,
         model=model,
