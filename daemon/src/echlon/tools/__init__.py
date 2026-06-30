@@ -18,15 +18,17 @@ from .browser import (
 from .computer import COMPUTER_TOOLS
 from .files import file_edit, file_read, file_write
 from .shell import shell_exec
+from .skills import SKILL_TOOLS, set_skills_dir
 from .todo import todo_read, todo_write
 
 
-def build_tools(workspace: Path, os_control: bool = True) -> list[Tool]:
+def build_tools(workspace: Path, os_control: bool = True, skills_dir: Path | None = None) -> list[Tool]:
     """Initialize the workspace and return the active tool set.
 
     When os_control is True (default), the whole-desktop computer_* tools
     (screenshot + mouse/keyboard) are included alongside the shell/file/browser
-    tools, so the agent can drive any app — not just the browser.
+    tools, so the agent can drive any app — not just the browser. When skills_dir
+    is given, the skill-acquisition tools (skill_list/read/install) are included.
     """
     context.set_workspace(workspace)
     tools = [
@@ -44,6 +46,9 @@ def build_tools(workspace: Path, os_control: bool = True) -> list[Tool]:
     ]
     if os_control:
         tools += COMPUTER_TOOLS
+    if skills_dir is not None:
+        set_skills_dir(skills_dir)
+        tools += SKILL_TOOLS
     return tools
 
 

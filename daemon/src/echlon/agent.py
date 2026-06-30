@@ -13,6 +13,7 @@ from .config import EchlonConfig
 from .models import build_model
 from .policy import set_policy
 from .tools import build_tools, context as tool_context
+from .tools import skills as tool_skills
 from .tools.computer import attach_screenshot_step
 
 # Manus-derived operating instructions (PLAN.md §2). Static → cache-stable.
@@ -59,6 +60,13 @@ Operating principles:
       actually LAUNCH it for them, detached so it stays open without blocking:
       shell_exec("nohup python3 '<abs path>' >/dev/null 2>&1 &"). A blocking run
       (one that never returns) is a launch, not a test — background it.
+- ACQUIRE SKILLS WHEN YOU NEED THEM. You have an installable skill library
+  (skills.sh / SKILL.md format); the ones you have are listed under "Skills" below.
+  Call skill_read('<name>') to load a skill's full instructions and follow them. If
+  a task needs specialized know-how you don't already have, find a skill at
+  https://skills.sh and call skill_install('owner/repo'), then read and follow it —
+  acquire the capability rather than improvising. A skill's own scripts run under
+  the guardrail like any other command.
 - BE TRUTHFUL ABOUT WHAT YOU DID. Never claim you "opened" or "launched" something
   you only tested. Distinguish "I verified it runs" from "I opened it for you". If a
   step was a quick smoke check, say so. Report exactly what happened, no more.
@@ -100,8 +108,16 @@ def build_agent(cfg: EchlonConfig, model=None, stream_outputs: bool = True,
     the built-ins.
     """
     model = model or build_model(cfg)
-    tools = build_tools(cfg.workspace, os_control=cfg.os_control)
+    tools = build_tools(
+        cfg.workspace, os_control=cfg.os_control,
+        skills_dir=cfg.skills_dir if cfg.enable_skills else None,
+    )
     set_policy(cfg.policy_mode, cfg.workspace)  # type: ignore[arg-type]
+    # Compose the system prompt with the live skills index (metadata only — full
+    # skill bodies load on demand). Stable within a session → cache-friendly.
+    instructions = INSTRUCTIONS
+    if cfg.enable_skills:
+        instructions = INSTRUCTIONS + "\n\n## Skills\n" + tool_skills.index_text()
     callbacks = [_recite_todo]
     if cfg.os_control:
         callbacks.append(attach_screenshot_step)  # surface screenshots to the model
@@ -110,7 +126,7 @@ def build_agent(cfg: EchlonConfig, model=None, stream_outputs: bool = True,
     return CodeAgent(
         tools=tools,
         model=model,
-        instructions=INSTRUCTIONS,
+        instructions=instructions,
         additional_authorized_imports=["*"],  # full host access (PLAN.md §1)
         planning_interval=cfg.planning_interval,
         max_steps=cfg.max_steps,
