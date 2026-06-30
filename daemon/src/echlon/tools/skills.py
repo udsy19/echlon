@@ -64,6 +64,11 @@ def _installed() -> list[tuple[str, dict[str, str], Path]]:
     return out
 
 
+def list_installed() -> list[dict[str, str]]:
+    """[{name, description}] for the daemon's /skills endpoint."""
+    return [{"name": name, "description": meta.get("description", "")} for name, meta, _ in _installed()]
+
+
 def index_text() -> str:
     """One-line-per-skill index for the system prompt (metadata only)."""
     skills = _installed()

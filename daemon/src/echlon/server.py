@@ -28,7 +28,7 @@ log = get_logger(__name__)
 
 _sessions: dict[str, Session] = {}
 _MAX_BODY = 1 << 20  # 1 MiB request cap
-_MAX_STEPS_LIMIT = 200
+_MAX_STEPS_LIMIT = 2000  # long-horizon tasks (e.g. "apply to 50 jobs") need a big budget
 _MAX_SESSIONS = 64  # retain at most this many; oldest *closed* ones are evicted
 _TERMINAL = ("closed",)
 
@@ -90,6 +90,10 @@ class _Handler(BaseHTTPRequestHandler):
             return self._json(200, {"status": "ok"})
         if parsed.path == "/status":
             return self._status(parse_qs(parsed.query).get("session", [""])[0])
+        if parsed.path == "/skills":
+            return self._skills_list()
+        if parsed.path == "/connectors":
+            return self._connectors_list()
         if parsed.path == "/events":
             q = parse_qs(parsed.query)
             try:
@@ -114,6 +118,12 @@ class _Handler(BaseHTTPRequestHandler):
             return self._cancel(body)
         if parsed.path == "/close":
             return self._close(body)
+        if parsed.path == "/skills/install":
+            return self._skill_install(body)
+        if parsed.path == "/connectors/add":
+            return self._connector_add(body)
+        if parsed.path == "/connectors/remove":
+            return self._connector_remove(body)
         self._json(404, {"error": "not found"})
 
     def _start_run(self, body: dict) -> None:
@@ -187,6 +197,48 @@ class _Handler(BaseHTTPRequestHandler):
             return self._json(404, {"error": "unknown session"})
         ok = session.decide(body.get("id", ""), body.get("decision", "deny"))
         self._json(200, {"ok": ok})
+
+    # --- capabilities (skills + connectors) ---------------------------------
+
+    def _caps(self):
+        """Point the skill/connector modules at the configured paths, lazily."""
+        from .tools import connectors, skills
+        cfg = load_config()
+        skills.set_skills_dir(cfg.skills_dir)
+        connectors.set_connectors_file(cfg.connectors_file)
+        return skills, connectors
+
+    def _skills_list(self) -> None:
+        skills, _ = self._caps()
+        self._json(200, {"skills": skills.list_installed()})
+
+    def _skill_install(self, body: dict) -> None:
+        source = body.get("source")
+        if not source or not isinstance(source, str):
+            return self._json(400, {"error": "missing or invalid 'source'"})
+        skills, _ = self._caps()
+        result = skills.skill_install(source)
+        self._json(200 if result.startswith("[ok]") else 400, {"result": result})
+
+    def _connectors_list(self) -> None:
+        _, connectors = self._caps()
+        self._json(200, {"connectors": connectors.list_configured()})
+
+    def _connector_add(self, body: dict) -> None:
+        name, spec = body.get("name"), body.get("spec")
+        if not name or not isinstance(name, str) or not isinstance(spec, dict):
+            return self._json(400, {"error": "need 'name' (str) and 'spec' (object)"})
+        _, connectors = self._caps()
+        result = connectors.connector_add(name, json.dumps(spec))
+        self._json(200 if result.startswith("[ok]") else 400, {"result": result})
+
+    def _connector_remove(self, body: dict) -> None:
+        name = body.get("name")
+        if not name or not isinstance(name, str):
+            return self._json(400, {"error": "missing or invalid 'name'"})
+        _, connectors = self._caps()
+        result = connectors.connector_remove(name)
+        self._json(200 if result.startswith("[ok]") else 404, {"result": result})
 
     def _stream_events(self, session_id: str, start: int = 0) -> None:
         session = _sessions.get(session_id)

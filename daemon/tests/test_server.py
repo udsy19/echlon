@@ -91,6 +91,31 @@ def test_close_unknown_session(base_url) -> None:
     assert _post(f"{base_url}/close", {"session": "nope"})[0] == 404
 
 
+def test_skills_list(base_url, monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("ECHLON_SKILLS_DIR", str(tmp_path / "skills"))
+    status, body = _get(f"{base_url}/skills")
+    assert status == 200 and isinstance(body["skills"], list)
+
+
+def test_skill_install_requires_source(base_url) -> None:
+    assert _post(f"{base_url}/skills/install", {})[0] == 400
+
+
+def test_connectors_list_add_remove(base_url, monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("ECHLON_CONNECTORS_FILE", str(tmp_path / "connectors.json"))
+    assert _get(f"{base_url}/connectors")[0] == 200
+
+    status, body = _post(f"{base_url}/connectors/add",
+                         {"name": "fs", "spec": {"command": "npx", "args": ["x"]}})
+    assert status == 200 and "[ok]" in body["result"]
+    assert any(c["name"] == "fs" for c in _get(f"{base_url}/connectors")[1]["connectors"])
+    assert _post(f"{base_url}/connectors/remove", {"name": "fs"})[0] == 200
+
+
+def test_connector_add_validation(base_url) -> None:
+    assert _post(f"{base_url}/connectors/add", {"name": "x"})[0] == 400
+
+
 def test_run_409_when_busy(base_url) -> None:
     # Inject a stand-in "running" session; /run must refuse a second.
     class _Busy:

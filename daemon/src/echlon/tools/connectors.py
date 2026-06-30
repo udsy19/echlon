@@ -50,6 +50,15 @@ def _save(cfg: dict) -> None:
     _connectors_file.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
 
 
+def list_configured() -> list[dict]:
+    """[{name, enabled, where}] for the daemon's /connectors endpoint."""
+    out = []
+    for name, spec in _load().items():
+        where = spec["url"] if "url" in spec else f"{spec.get('command', '')} {' '.join(spec.get('args', []))}".strip()
+        out.append({"name": name, "enabled": bool(spec.get("enabled", True)), "where": where})
+    return out
+
+
 def _params(spec: dict):
     """Build MCPClient server params from a registry spec (http dict or stdio)."""
     if "url" in spec:
